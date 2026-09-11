@@ -1,6 +1,6 @@
 # Thin wrapper over meson. Ninja already tracks dependencies, so every target
 # defers to it rather than restating them here.
-.PHONY: all run clean install uninstall
+.PHONY: all run test clean install uninstall
 
 BUILD := build
 BIN   := $(BUILD)/src/mdex
@@ -27,3 +27,6 @@ uninstall:
 
 clean:
 	rm -rf $(BUILD)
+
+test: all
+	meson test -C $(BUILD) --print-errorlogs

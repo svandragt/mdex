@@ -18,3 +18,5 @@ dependencies = [
 
 subdir('data')
 subdir('src')
+
+subdir('tests')

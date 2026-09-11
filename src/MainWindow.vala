@@ -53,6 +53,13 @@ namespace Mdex {
             open_button.clicked.connect (on_open_clicked);
             header.pack_start (open_button);
 
+            var unwrap_button = new Gtk.Button () {
+                label = "Unwrap",
+                tooltip_text = "Unwrap paragraphs",
+            };
+            unwrap_button.clicked.connect (() => activate_action ("edit.unwrap", null));
+            header.pack_start (unwrap_button);
+
             export_button = new Gtk.MenuButton () {
                 label = "Export",
                 tooltip_text = "Export",
@@ -90,6 +97,12 @@ namespace Mdex {
             export_actions = new SimpleActionGroup ();
             insert_action_group ("export", export_actions);
 
+            var edit_actions = new SimpleActionGroup ();
+            var unwrap_action = new SimpleAction ("unwrap", null);
+            unwrap_action.activate.connect (() => do_unwrap ());
+            edit_actions.add_action (unwrap_action);
+            insert_action_group ("edit", edit_actions);
+
             Granite.Settings.get_default ().notify["prefers-color-scheme"].connect (update_theme);
             sync_local_theme ();
             preview_ready.connect (update_theme);
@@ -104,6 +117,10 @@ namespace Mdex {
                 warning ("failed to load preview shell: %s", e.message);
                 return;
             }
+            // "application" isn't set until after construct{} returns (it's
+            // not a construct property), so the accel has to wait until here,
+            // once the yield above has actually suspended past construction.
+            application.set_accels_for_action ("edit.unwrap", { "<Control><Shift>u" });
             preview_ready ();
         }
 
@@ -141,6 +158,23 @@ namespace Mdex {
         private void update_theme () {
             sync_local_theme ();
             preview.set_theme.begin (is_dark ());
+        }
+
+        /** Rewrites the buffer with unwrapped text, as one undo step. */
+        private void do_unwrap () {
+            Gdk.Rectangle visible;
+            editor.view.get_visible_rect (out visible);
+            Gtk.TextIter top_iter;
+            editor.view.get_iter_at_location (out top_iter, visible.x, visible.y);
+            int top_line = top_iter.get_line ();
+
+            editor.buffer.begin_user_action ();
+            editor.buffer.text = Editor.unwrap (editor.get_text ());
+            editor.buffer.end_user_action ();
+
+            Gtk.TextIter scroll_iter;
+            editor.buffer.get_iter_at_line (out scroll_iter, top_line);
+            editor.view.scroll_to_iter (scroll_iter, 0, false, 0, 0);
         }
 
         private void on_open_clicked () {

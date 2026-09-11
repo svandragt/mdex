@@ -19,6 +19,8 @@ sudo apt install libgtksourceview-5-dev libwebkitgtk-6.0-dev libgranite-7-dev \
 make run
 ```
 
+`make test` runs the unwrapping checks.
+
 `make install` puts `mdex` in `~/.local/bin` and its launcher in the
 applications menu, neither of which needs sudo. For a system-wide install:
 
@@ -57,12 +59,21 @@ Text from a language model usually arrives hard-wrapped at about 80 columns.
 mdex treats those wraps as an artefact of how the text was written, not as
 meaning:
 
-- The editor soft-wraps, so long lines never scroll sideways.
-- The preview reflows each paragraph into one block, because the renderer
-  follows CommonMark rather than turning every newline into a line break.
-- The exporters collapse those newlines to single spaces. Slack renders literal
-  newlines, so without this a message looks ragged even when the preview looked
-  right.
+- Anything you open, pipe in, or restore from the scratch buffer has its
+  paragraphs unwrapped on load: the hard newlines inside a paragraph go, and it
+  becomes one line. Headings, lists, quotes, tables and code blocks keep their
+  shape, and a deliberate line break — two trailing spaces — survives.
+- The editor soft-wraps, so those long lines never scroll sideways.
+- The preview reflows each paragraph, because the renderer follows CommonMark
+  rather than turning every newline into a line break.
+- The exporters collapse any remaining newlines to single spaces. Slack renders
+  literal newlines, so without this a message looks ragged even when the preview
+  looked right.
+
+Unwrapping rewrites the document, and autosave will keep it, so opening a
+hard-wrapped file and typing one character reformats its paragraphs. Press
+Ctrl+Shift+U, or use the Unwrap button, to reflow text you pasted into an
+already-open document.
 
 ## Write a plugin
 

@@ -30,7 +30,7 @@ namespace Mdex {
                 open_file.begin (GLib.File.new_for_commandline_arg (args[1]));
             } else if (!Posix.isatty (0) && read_stdin_if_any (out piped)) {
                 current_file = null;
-                window.set_text (piped);
+                window.set_text (Editor.unwrap (piped));
                 window.set_subtitle ("Scratch");
             } else {
                 restore_scratch ();
@@ -65,7 +65,7 @@ namespace Mdex {
             string contents;
             try {
                 FileUtils.get_contents (scratch_file ().get_path (), out contents);
-                window.set_text (contents);
+                window.set_text (Editor.unwrap (contents));
             } catch (GLib.FileError e) {
                 // No previous scratch session — start empty, nothing to recover.
             }
@@ -76,7 +76,7 @@ namespace Mdex {
                 uint8[] contents;
                 string? etag;
                 yield file.load_contents_async (null, out contents, out etag);
-                window.set_text ((string) contents);
+                window.set_text (Editor.unwrap ((string) contents));
                 current_file = file;
                 window.set_subtitle (file.get_basename ());
             } catch (GLib.Error e) {
