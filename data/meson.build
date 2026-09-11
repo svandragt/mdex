@@ -9,3 +9,8 @@ install_data(
   'com.github.svandragt.mdex.desktop',
   install_dir: get_option('datadir') / 'applications',
 )
+
+install_data(
+  'icons' / 'com.github.svandragt.mdex.svg',
+  install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps',
+)

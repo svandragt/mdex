@@ -27,6 +27,9 @@ namespace Mdex {
         construct {
             default_width = 1100;
             default_height = 720;
+            // Wayland matches the app id to the .desktop file for this, but X11
+            // needs it stated.
+            icon_name = "com.github.svandragt.mdex";
 
             var title_box = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) {
                 valign = Gtk.Align.CENTER,
@@ -51,7 +54,7 @@ namespace Mdex {
             header.pack_start (open_button);
 
             export_button = new Gtk.MenuButton () {
-                icon_name = "document-export-symbolic",
+                label = "Export",
                 tooltip_text = "Export",
                 sensitive = false,
             };

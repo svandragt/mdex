@@ -75,6 +75,9 @@ window.mdex.registerExporter('upper', 'Upper case', (tokens, raw) => {
 });
 ```
 
+`examples/plaintext.js` is a working one: copy it to `~/.config/mdex/plugins/`
+and "Plain text" appears in the Export menu alongside the built-in formats.
+
 Restart mdex and the format appears in the Export menu. The three built-in
 exporters register through the same call, so a plugin can do anything they can —
 including replacing one of them by reusing its id.
