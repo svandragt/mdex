@@ -72,8 +72,7 @@ meaning:
 
 Unwrapping rewrites the document, and autosave will keep it, so opening a
 hard-wrapped file and typing one character reformats its paragraphs. Press
-Ctrl+Shift+U, or use the Unwrap button, to reflow text you pasted into an
-already-open document.
+Ctrl+Shift+U to reflow text you pasted into an already-open document.
 
 ## Write a plugin
 

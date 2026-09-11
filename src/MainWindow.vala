@@ -53,13 +53,6 @@ namespace Mdex {
             open_button.clicked.connect (on_open_clicked);
             header.pack_start (open_button);
 
-            var unwrap_button = new Gtk.Button () {
-                label = "Unwrap",
-                tooltip_text = "Unwrap paragraphs",
-            };
-            unwrap_button.clicked.connect (() => activate_action ("edit.unwrap", null));
-            header.pack_start (unwrap_button);
-
             export_button = new Gtk.MenuButton () {
                 label = "Export",
                 tooltip_text = "Export",
