@@ -6,6 +6,8 @@ namespace Mdex {
     public class Application : Gtk.Application {
         private MainWindow? window = null;
         private GLib.File? current_file = null;
+        private string? current_etag = null;
+        private GLib.FileMonitor? monitor = null;
         private uint autosave_id = 0;
 
         private const string USAGE = """Usage:
@@ -90,12 +92,46 @@ Options:
                 uint8[] contents;
                 string? etag;
                 yield file.load_contents_async (null, out contents, out etag);
+
+                // Our own autosave fires the monitor too; the etag tells the
+                // two apart, so reloading doesn't fight the editor.
+                if (current_file != null && file.equal (current_file) && etag == current_etag) {
+                    return;
+                }
+
                 window.set_text (Editor.unwrap ((string) contents));
                 current_file = file;
+                current_etag = etag;
                 window.set_subtitle (file.get_basename ());
+                watch (file);
             } catch (GLib.Error e) {
                 warning ("failed to open %s: %s", file.get_path (), e.message);
             }
+        }
+
+        /**
+         * Reloads the open file when something else writes to it.
+         *
+         * CHANGES_DONE_HINT rather than CHANGED: one write arrives as a burst
+         * of CHANGED events, and reloading mid-burst shows a half-written
+         * file. CREATED covers editors that save by replacing the file.
+         */
+        private void watch (GLib.File file) {
+            if (monitor != null) {
+                monitor.cancel ();
+            }
+            try {
+                monitor = file.monitor_file (GLib.FileMonitorFlags.NONE, null);
+            } catch (GLib.Error e) {
+                warning ("cannot watch %s: %s", file.get_path (), e.message);
+                return;
+            }
+            monitor.changed.connect ((f, other, event) => {
+                if (event == GLib.FileMonitorEvent.CHANGES_DONE_HINT
+                    || event == GLib.FileMonitorEvent.CREATED) {
+                    open_file.begin (file);
+                }
+            });
         }
 
         private GLib.File scratch_file () {
@@ -118,7 +154,11 @@ Options:
         private void save_now (string text) {
             GLib.File target = current_file ?? scratch_file ();
             try {
-                target.replace_contents (text.data, null, false, GLib.FileCreateFlags.NONE, null, null);
+                string? new_etag;
+                target.replace_contents (text.data, null, false, GLib.FileCreateFlags.NONE, out new_etag, null);
+                if (current_file != null) {
+                    current_etag = new_etag;
+                }
             } catch (GLib.Error e) {
                 warning ("autosave to %s failed: %s", target.get_path (), e.message);
             }
