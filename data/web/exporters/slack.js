@@ -130,6 +130,6 @@
   }
 
   window.mdex.registerExporter("slack", "Slack message", function (tokens, raw) {
-    return blocks(tokens).trim();
+    return window.mdex.unescape(blocks(tokens).trim());
   });
 })();

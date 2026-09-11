@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "make -C \"$CLAUDE_PROJECT_DIR\" install >/dev/null 2>&1 || true",
+            "statusMessage": "Installing mdex...",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

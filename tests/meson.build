@@ -7,3 +7,9 @@ unwrap_test = executable(
 )
 
 test('unwrap', unwrap_test)
+
+# The exporters are JavaScript, so this one runs under node when there is one.
+node = find_program('node', required: false)
+if node.found()
+  test('exporters', node, args: [files('exporters.js')])
+endif

@@ -8,7 +8,7 @@
   }
 
   function pushText(out, text, marks) {
-    const collapsed = collapseWs(text);
+    const collapsed = window.mdex.unescape(collapseWs(text));
     if (!collapsed) return;
     const node = { type: "text", text: collapsed };
     if (marks && marks.length) node.marks = marks;

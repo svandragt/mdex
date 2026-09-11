@@ -152,7 +152,20 @@ html, body {
 
   marked.setOptions({ gfm: true, breaks: false });
 
+  // marked's token `text` is HTML-escaped (James&#39;s). Exporters emit plain
+  // text, not HTML, so they undo it at the point they read a token.
+  function unescapeEntities(s) {
+    return (s || "")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#0?39;/g, "'")
+      .replace(/&amp;/g, "&");
+  }
+
   window.mdex = {
+    unescape: unescapeEntities,
+
     render(md) {
       output.innerHTML = marked.parse(md || "");
       return "";
