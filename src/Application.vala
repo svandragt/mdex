@@ -8,6 +8,15 @@ namespace Mdex {
         private GLib.File? current_file = null;
         private uint autosave_id = 0;
 
+        private const string USAGE = """Usage:
+  mdex [FILE]     open FILE, or restore the scratch buffer
+  ... | mdex      edit piped text as a scratch buffer
+
+Options:
+  -h, --help      show this help
+
+""";
+
         public Application () {
             Object (
                 application_id: "com.github.svandragt.mdex",
@@ -18,6 +27,11 @@ namespace Mdex {
         public override int command_line (ApplicationCommandLine cmdline) {
             string[] args = cmdline.get_arguments ();
             string piped = "";
+
+            if (args.length > 1 && (args[1] == "--help" || args[1] == "-h")) {
+                cmdline.print ("%s", USAGE);
+                return 0;
+            }
 
             if (window == null) {
                 window = new MainWindow (this);
