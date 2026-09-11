@@ -12,6 +12,27 @@ namespace Mdex {
         construct {
             hexpand = true;
             vexpand = true;
+
+            // The shell page is the whole preview; following a link inside it
+            // would replace the renderer. Hand real URLs to the browser.
+            decide_policy.connect ((decision, type) => {
+                if (type != WebKit.PolicyDecisionType.NAVIGATION_ACTION
+                    && type != WebKit.PolicyDecisionType.NEW_WINDOW_ACTION) {
+                    return false;
+                }
+                var action = ((WebKit.NavigationPolicyDecision) decision).get_navigation_action ();
+                if (action.get_navigation_type () != WebKit.NavigationType.LINK_CLICKED) {
+                    return false;
+                }
+                decision.ignore ();
+                string uri = action.get_request ().get_uri ();
+                try {
+                    AppInfo.launch_default_for_uri (uri, null);
+                } catch (GLib.Error e) {
+                    warning ("could not open %s: %s", uri, e.message);
+                }
+                return true;
+            });
         }
 
         /** Assembles shell.html from the gresource bundle and loads it once. */
