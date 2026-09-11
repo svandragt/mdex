@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/github/svandragt/mdex/web">
+    <file alias="shell.html">web/shell.html</file>
+    <file alias="marked.min.js">web/marked.min.js</file>
+    <file alias="github-markdown.css">web/github-markdown.css</file>
+    <file alias="exporters/github.js">web/exporters/github.js</file>
+    <file alias="exporters/slack.js">web/exporters/slack.js</file>
+    <file alias="exporters/adf.js">web/exporters/adf.js</file>
+  </gresource>
+</gresources>

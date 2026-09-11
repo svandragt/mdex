@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Mdex
+Comment=A markdown editor with live preview
+Exec=mdex %f
+Icon=com.github.svandragt.mdex
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/markdown;
