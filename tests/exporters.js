@@ -40,4 +40,9 @@ assert.ok(!/&(#\d+|amp|quot|lt|gt);/.test(adf), `entities in adf export: ${adf}`
 const code = run("slack", "Use `a && b` here.\n\n```\nx > y && z\n```");
 assert.ok(!/&(#\d+|amp|quot|lt|gt);/.test(code), code);
 
+// Links carry their own label rather than trailing a bare URL.
+const link = run("slack", "See [burohappold#558](https://example.com/pull/558) today.");
+assert.strictEqual(link, "See [burohappold#558](https://example.com/pull/558) today.");
+assert.strictEqual(run("slack", "<https://example.com/bare>"), "https://example.com/bare");
+
 console.log("ok");

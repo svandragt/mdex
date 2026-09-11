@@ -25,9 +25,9 @@
       case "link": {
         const label = inline(t.tokens).trim();
         if (!label || label === t.href) return t.href;
-        // Bracket syntax is never valid Slack markup — fall back to the
-        // label followed by the bare URL on its own line.
-        return label + "\n" + t.href;
+        // Slack's composer turns a pasted markdown link into a real one, so
+        // the label carries the link instead of trailing the bare URL.
+        return "[" + label + "](" + t.href + ")";
       }
       case "image":
         return t.href || "";
