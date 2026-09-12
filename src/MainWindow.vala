@@ -240,8 +240,45 @@ namespace Mdex {
 
         private async void run_export (string id, string label) {
             try {
-                string result = yield preview.run (id, editor.get_text ());
-                Gdk.Display.get_default ().get_clipboard ().set_text (result);
+                string json = yield preview.run (id, editor.get_text ());
+
+                Json.Node? root = null;
+                try {
+                    var parser = new Json.Parser ();
+                    parser.load_from_data (json);
+                    root = parser.get_root ();
+                } catch (GLib.Error e) {
+                    warning ("could not parse export result: %s", e.message);
+                    show_toast ("Export to %s failed".printf (label));
+                    return;
+                }
+                if (root == null || root.get_node_type () != Json.NodeType.OBJECT) {
+                    warning ("export %s returned no result", id);
+                    show_toast ("Export to %s failed".printf (label));
+                    return;
+                }
+                unowned Json.Object obj = root.get_object ();
+                if (!obj.has_member ("text")) {
+                    warning ("export %s returned no text", id);
+                    show_toast ("Export to %s failed".printf (label));
+                    return;
+                }
+                string text = obj.get_string_member ("text");
+                string html = obj.has_member ("html") ? obj.get_string_member ("html") : "";
+
+                var clipboard = Gdk.Display.get_default ().get_clipboard ();
+                if (html != "") {
+                    // Slack's composer parses pasted plain text as markdown unreliably, so
+                    // offer the HTML flavour first for targets that accept rich text.
+                    var html_provider = new Gdk.ContentProvider.for_bytes ("text/html", new GLib.Bytes (html.data));
+                    var text_value = GLib.Value (typeof (string));
+                    text_value.set_string (text);
+                    var text_provider = new Gdk.ContentProvider.for_value (text_value);
+                    var union = new Gdk.ContentProvider.union ({ html_provider, text_provider });
+                    clipboard.set_content (union);
+                } else {
+                    clipboard.set_text (text);
+                }
                 show_toast ("Copied %s to clipboard".printf (label));
             } catch (GLib.Error e) {
                 warning ("export %s failed: %s", id, e.message);

@@ -129,7 +129,17 @@
       .join("\n\n");
   }
 
-  window.mdex.registerExporter("slack", "Slack message", function (tokens, raw) {
-    return window.mdex.unescape(blocks(tokens).trim());
-  });
+  window.mdex.registerExporter(
+    "slack",
+    "Slack message",
+    function (tokens, raw) {
+      return window.mdex.unescape(blocks(tokens).trim());
+    },
+    // Slack's composer parses pasted plain text as markdown unreliably, but
+    // takes pasted rich text (text/html) as-is, so offer the same rendering
+    // the preview pane already produces.
+    function (tokens, raw) {
+      return marked.parse(raw);
+    }
+  );
 })();

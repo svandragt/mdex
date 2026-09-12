@@ -181,19 +181,23 @@ html, body {
       const exporter = exportersById[id];
       if (!exporter) return "";
       const tokens = marked.lexer(md || "");
-      return exporter.fn(tokens, md || "");
+      return JSON.stringify({
+        text: exporter.fn(tokens, md || ""),
+        html: exporter.html ? exporter.html(tokens, md || "") : "",
+      });
     },
 
-    registerExporter(id, label, fn) {
+    registerExporter(id, label, fn, htmlFn) {
       if (exportersById[id]) {
         // Re-registering an id (e.g. a plugin reload) replaces it in place
         // rather than duplicating it in list() order.
         const existing = exportersById[id];
         existing.label = label;
         existing.fn = fn;
+        existing.html = htmlFn;
         return;
       }
-      const exporter = { id: id, label: label, fn: fn };
+      const exporter = { id: id, label: label, fn: fn, html: htmlFn };
       exporters.push(exporter);
       exportersById[id] = exporter;
     },

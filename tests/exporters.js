@@ -24,7 +24,8 @@ vm.runInContext(read("marked.min.js"), sandbox);
 vm.runInContext(bridge, sandbox);
 ["github", "slack", "adf"].forEach((e) => vm.runInContext(read(`exporters/${e}.js`), sandbox));
 
-const run = (id, md) => sandbox.window.mdex.run(id, md);
+const run = (id, md) => JSON.parse(sandbox.window.mdex.run(id, md)).text;
+const runHtml = (id, md) => JSON.parse(sandbox.window.mdex.run(id, md)).html;
 
 // Entities from marked's escaping must not reach the exported text.
 const md = "Merged after James's review of \"the\" thing & more.";
@@ -44,5 +45,12 @@ assert.ok(!/&(#\d+|amp|quot|lt|gt);/.test(code), code);
 const link = run("slack", "See [burohappold#558](https://example.com/pull/558) today.");
 assert.strictEqual(link, "See [burohappold#558](https://example.com/pull/558) today.");
 assert.strictEqual(run("slack", "<https://example.com/bare>"), "https://example.com/bare");
+
+// Slack's HTML flavour is the same rendering the preview pane shows.
+const linkHtml = runHtml("slack", "See [burohappold#558](https://example.com/pull/558) today.");
+assert.ok(linkHtml.includes('<a href="https://example.com/pull/558"'), linkHtml);
+
+// github has no HTML flavour.
+assert.strictEqual(runHtml("github", md), "");
 
 console.log("ok");
