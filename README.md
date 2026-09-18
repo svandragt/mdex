@@ -4,9 +4,10 @@ A two-pane markdown editor for elementary OS. Write GitHub-flavoured markdown on
 the left, see it rendered on the right, then export it to the format the
 destination actually wants.
 
-The editor is the easy half. The point is the export step: text drafted once
+The editor is the easy half. The point is what happens next: text drafted once
 leaves as a Slack message, as ADF for Jira and Confluence Cloud, or as plain
-GitHub markdown, without reformatting it by hand.
+GitHub markdown, without reformatting it by hand — or goes straight to your blog
+as a post.
 
 ## Build and run
 
@@ -101,12 +102,11 @@ window.mdex.registerExporter('upper', 'Upper case', (tokens, raw) => {
 });
 ```
 
-`examples/plaintext.js` is a working one: copy it to `~/.config/mdex/plugins/`
-and "Plain text" appears in the Export menu alongside the built-in formats.
-
-Restart mdex and the format appears in the Export menu. The three built-in
-exporters register through the same call, so a plugin can do anything they can —
-including replacing one of them by reusing its id.
+`examples/plaintext.js` is a working one: copy it to `~/.config/mdex/plugins/`,
+restart mdex, and "Plain text" appears in the Export menu alongside the built-in
+formats. The three built-in exporters register through the same call, so a
+plugin can do anything they can — including replacing one of them by reusing its
+id.
 
 ## How it works
 
@@ -115,6 +115,9 @@ Rendering and exporting both walk the same token stream from
 [marked](https://marked.js.org), so the preview and the export can't disagree
 about what the document says. Vala handles the window, file I/O, autosave, the
 command line and the clipboard.
+
+Publishing shells out to mp rather than speaking Micropub itself. Your token
+stays in mp's config, and a blog mp can post to is a blog mdex can post to.
 
 The export menu is built at run time by asking the WebView which exporters are
 registered. That is why a plugin is a first-class format rather than a
