@@ -53,6 +53,22 @@ Export from the header bar menu, or with a shortcut:
 
 The result lands on the clipboard, ready to paste.
 
+## Publish to your blog
+
+The send button in the header bar publishes the document to your
+Micropub endpoint through [mp](https://github.com/mjdescy/mp), so mdex never
+handles your endpoint or token. The button appears once mp is on your PATH.
+Install and configure it once:
+
+```
+cargo install --git https://github.com/mjdescy/mp --tag v0.1.1 -p mpcli
+mp configure
+```
+
+A level 1 heading on the first line becomes the post title; without one the post
+is untitled. Publishing goes live straight away, so mdex asks to confirm first,
+then opens the published post in your browser.
+
 ## Hard-wrapped text
 
 Text from a language model usually arrives hard-wrapped at about 80 columns.

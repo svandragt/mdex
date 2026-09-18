@@ -19,6 +19,8 @@ namespace Mdex {
         public signal void open_requested (GLib.File file);
         /** Fired on every edit, for the Application to debounce into an autosave. */
         public signal void text_changed (string text);
+        /** Fired when the user confirms publishing the buffer to their blog. */
+        public signal void publish_requested (string text);
 
         public MainWindow (Gtk.Application app) {
             Object (application: app);
@@ -59,6 +61,16 @@ namespace Mdex {
                 sensitive = false,
             };
             header.pack_end (export_button);
+
+            // pack_end stacks right to left, so this lands left of Export.
+            // Without mp there is nothing to publish through, so the button
+            // stays hidden rather than offering an action that can only fail.
+            var publish_button = new Gtk.Button.from_icon_name ("document-send-symbolic") {
+                tooltip_text = "Publish to blog",
+                visible = GLib.Environment.find_program_in_path ("mp") != null,
+            };
+            publish_button.clicked.connect (confirm_publish);
+            header.pack_end (publish_button);
 
             set_titlebar (header);
 
@@ -236,6 +248,25 @@ namespace Mdex {
                 default:
                     return null;
             }
+        }
+
+        /** Publishing is live and can't be undone, so it asks first. */
+        private void confirm_publish () {
+            var dialog = new Gtk.AlertDialog ("Publish this post to your blog?") {
+                detail = "It goes live immediately. The first line's heading becomes the title.",
+                buttons = { "Cancel", "Publish" },
+                cancel_button = 0,
+                default_button = 1,
+            };
+            dialog.choose.begin (this, null, (obj, res) => {
+                try {
+                    if (dialog.choose.end (res) == 1) {
+                        publish_requested (editor.get_text ());
+                    }
+                } catch (GLib.Error e) {
+                    // Dismissed — nothing to publish.
+                }
+            });
         }
 
         private async void run_export (string id, string label) {

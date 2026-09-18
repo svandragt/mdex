@@ -39,6 +39,7 @@ Options:
                 window = new MainWindow (this);
                 window.open_requested.connect ((file) => open_file.begin (file));
                 window.text_changed.connect (schedule_autosave);
+                window.publish_requested.connect ((text) => publish.begin (text));
                 window.preview_ready.connect (() => on_preview_ready.begin ());
             }
 
@@ -162,6 +163,51 @@ Options:
             } catch (GLib.Error e) {
                 warning ("autosave to %s failed: %s", target.get_path (), e.message);
             }
+        }
+
+        /**
+         * Publishes the buffer through mpcli, which holds the Micropub
+         * endpoint and token — mdex never sees either.
+         */
+        private async void publish (string text) {
+            string output;
+            try {
+                var proc = new GLib.Subprocess (
+                    GLib.SubprocessFlags.STDIN_PIPE
+                        | GLib.SubprocessFlags.STDOUT_PIPE
+                        | GLib.SubprocessFlags.STDERR_MERGE,
+                    "mp", "post", "--stdin", "--extract-title"
+                );
+                yield proc.communicate_utf8_async (text, null, out output, null);
+                if (!proc.get_successful ()) {
+                    warning ("mp post failed: %s", output);
+                    window.show_toast ("Publishing failed");
+                    return;
+                }
+            } catch (GLib.Error e) {
+                warning ("could not run mp: %s", e.message);
+                window.show_toast ("Publishing failed — is mp installed?");
+                return;
+            }
+
+            window.show_toast ("Published");
+
+            string? url = first_url (output);
+            if (url != null) {
+                new Gtk.UriLauncher (url).launch.begin (window, null);
+            }
+        }
+
+        private string? first_url (string output) {
+            try {
+                MatchInfo match;
+                if (new Regex ("https?://[^\\s]+").match (output, 0, out match)) {
+                    return match.fetch (0);
+                }
+            } catch (GLib.RegexError e) {
+                warning ("bad URL pattern: %s", e.message);
+            }
+            return null;
         }
 
         private async void on_preview_ready () {
