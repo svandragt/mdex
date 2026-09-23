@@ -31,8 +31,7 @@ sudo make install PREFIX=/usr/local
 
 ## Use it
 
-Start a new file with the New button or Ctrl+N, open an existing one with the
-Open button or Ctrl+O, pass a path on the command line, or pipe text in:
+Start an empty scratch buffer with the first header button or Ctrl+Shift+N, a new file with the next one or Ctrl+N, open an existing one with Ctrl+O, pass a path on the command line, or pipe text in:
 
 ```
 mdex notes.md

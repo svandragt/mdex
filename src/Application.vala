@@ -41,6 +41,7 @@ Options:
                 window = new MainWindow (this);
                 window.open_requested.connect ((file) => open_file.begin (file));
                 window.new_requested.connect ((file) => create_file.begin (file));
+                window.scratch_requested.connect (start_scratch);
                 window.text_changed.connect (schedule_autosave);
                 window.publish_requested.connect ((text) => publish.begin (text));
                 window.preview_ready.connect (() => on_preview_ready.begin ());
@@ -102,6 +103,18 @@ Options:
             } catch (GLib.FileError e) {
                 // No previous scratch session — start empty, nothing to recover.
             }
+        }
+
+        /** Drops the current document for an empty scratch buffer; autosave picks up scratch.md on the next edit. */
+        private void start_scratch () {
+            if (monitor != null) {
+                monitor.cancel ();
+                monitor = null;
+            }
+            current_file = null;
+            remember (null);
+            window.set_text ("");
+            window.set_subtitle ("Scratch");
         }
 
         private async void open_file (GLib.File file) {

@@ -19,6 +19,8 @@ namespace Mdex {
         public signal void open_requested (GLib.File file);
         /** Fired when the user picks a location for a new file; it does not exist yet. */
         public signal void new_requested (GLib.File file);
+        /** Fired when the user wants an empty scratch buffer, autosaved to the cache rather than a file. */
+        public signal void scratch_requested ();
         /** Fired on every edit, for the Application to debounce into an autosave. */
         public signal void text_changed (string text);
         /** Fired when the user confirms publishing the buffer to their blog. */
@@ -51,8 +53,14 @@ namespace Mdex {
                 title_widget = title_box,
             };
 
-            var new_button = new Gtk.Button.from_icon_name ("document-new-symbolic") {
-                tooltip_text = "New…",
+            var scratch_button = new Gtk.Button.from_icon_name ("document-new-symbolic") {
+                tooltip_text = "New scratch",
+            };
+            scratch_button.clicked.connect (() => scratch_requested ());
+            header.pack_start (scratch_button);
+
+            var new_button = new Gtk.Button.from_icon_name ("document-save-as-symbolic") {
+                tooltip_text = "New file…",
             };
             new_button.clicked.connect (on_new_clicked);
             header.pack_start (new_button);
@@ -120,6 +128,9 @@ namespace Mdex {
             var open_action = new SimpleAction ("open", null);
             open_action.activate.connect (() => on_open_clicked ());
             edit_actions.add_action (open_action);
+            var scratch_action = new SimpleAction ("scratch", null);
+            scratch_action.activate.connect (() => scratch_requested ());
+            edit_actions.add_action (scratch_action);
             insert_action_group ("edit", edit_actions);
 
             Granite.Settings.get_default ().notify["prefers-color-scheme"].connect (update_theme);
@@ -142,6 +153,7 @@ namespace Mdex {
             application.set_accels_for_action ("edit.unwrap", { "<Control><Shift>u" });
             application.set_accels_for_action ("edit.new", { "<Control>n" });
             application.set_accels_for_action ("edit.open", { "<Control>o" });
+            application.set_accels_for_action ("edit.scratch", { "<Control><Shift>n" });
             preview_ready ();
         }
 
