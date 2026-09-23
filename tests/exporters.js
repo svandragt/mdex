@@ -46,9 +46,16 @@ const link = run("slack", "See [burohappold#558](https://example.com/pull/558) t
 assert.strictEqual(link, "See [burohappold#558](https://example.com/pull/558) today.");
 assert.strictEqual(run("slack", "<https://example.com/bare>"), "https://example.com/bare");
 
-// Slack's HTML flavour is the same rendering the preview pane shows.
+// Slack's HTML flavour carries the preview pane's links.
 const linkHtml = runHtml("slack", "See [burohappold#558](https://example.com/pull/558) today.");
 assert.ok(linkHtml.includes('<a href="https://example.com/pull/558"'), linkHtml);
+
+// Slack drops the gap between pasted blocks, so the HTML flavour separates
+// them with a spacer paragraph that survives the paste.
+const sections = runHtml("slack", "**Key points**\n- one\n\n**Tomorrow**\n- two");
+assert.strictEqual(sections.match(/<p>&nbsp;<\/p>/g).length, 3, sections);
+// Reference links still resolve, so the per-block parse keeps tokens.links.
+assert.ok(runHtml("slack", "See [ref][1].\n\n[1]: https://example.com/ref").includes('href="https://example.com/ref"'));
 
 // github has no HTML flavour.
 assert.strictEqual(runHtml("github", md), "");

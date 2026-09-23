@@ -79,6 +79,7 @@
     }
 
     window.mdex.registerExporter ('plaintext', 'Plain text', function (tokens) {
-        return tokens.map (block).filter (Boolean).join ('\n\n') + '\n';
+        // marked HTML-escapes token text (GitHub&#39;s), so undo it for plain text.
+        return window.mdex.unescape (tokens.map (block).filter (Boolean).join ('\n\n')) + '\n';
     });
 }) ();

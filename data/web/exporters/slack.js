@@ -136,10 +136,20 @@
       return window.mdex.unescape(blocks(tokens).trim());
     },
     // Slack's composer parses pasted plain text as markdown unreliably, but
-    // takes pasted rich text (text/html) as-is, so offer the same rendering
-    // the preview pane already produces.
+    // takes pasted rich text (text/html) as-is, so offer the preview pane's
+    // rendering, spaced for Slack.
     function (tokens, raw) {
-      return marked.parse(raw);
+      // Slack collapses the gap between pasted block elements, so each block
+      // is parsed on its own and separated by a paragraph Slack won't drop.
+      // An empty <p> is dropped; one holding a non-breaking space survives.
+      return tokens
+        .filter(function (t) { return t.type !== "space"; })
+        .map(function (t) {
+          const one = [t];
+          one.links = tokens.links;
+          return marked.parser(one);
+        })
+        .join("<p>&nbsp;</p>\n");
     }
   );
 })();
