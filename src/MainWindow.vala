@@ -17,6 +17,8 @@ namespace Mdex {
         public signal void preview_ready ();
         /** Fired when the user picks a file to open via the header button. */
         public signal void open_requested (GLib.File file);
+        /** Fired when the user picks a location for a new file; it does not exist yet. */
+        public signal void new_requested (GLib.File file);
         /** Fired on every edit, for the Application to debounce into an autosave. */
         public signal void text_changed (string text);
         /** Fired when the user confirms publishing the buffer to their blog. */
@@ -48,6 +50,12 @@ namespace Mdex {
             var header = new Gtk.HeaderBar () {
                 title_widget = title_box,
             };
+
+            var new_button = new Gtk.Button.from_icon_name ("document-new-symbolic") {
+                tooltip_text = "New…",
+            };
+            new_button.clicked.connect (on_new_clicked);
+            header.pack_start (new_button);
 
             var open_button = new Gtk.Button.from_icon_name ("document-open-symbolic") {
                 tooltip_text = "Open…",
@@ -106,6 +114,12 @@ namespace Mdex {
             var unwrap_action = new SimpleAction ("unwrap", null);
             unwrap_action.activate.connect (() => do_unwrap ());
             edit_actions.add_action (unwrap_action);
+            var new_action = new SimpleAction ("new", null);
+            new_action.activate.connect (() => on_new_clicked ());
+            edit_actions.add_action (new_action);
+            var open_action = new SimpleAction ("open", null);
+            open_action.activate.connect (() => on_open_clicked ());
+            edit_actions.add_action (open_action);
             insert_action_group ("edit", edit_actions);
 
             Granite.Settings.get_default ().notify["prefers-color-scheme"].connect (update_theme);
@@ -126,6 +140,8 @@ namespace Mdex {
             // not a construct property), so the accel has to wait until here,
             // once the yield above has actually suspended past construction.
             application.set_accels_for_action ("edit.unwrap", { "<Control><Shift>u" });
+            application.set_accels_for_action ("edit.new", { "<Control>n" });
+            application.set_accels_for_action ("edit.open", { "<Control>o" });
             preview_ready ();
         }
 
@@ -180,6 +196,23 @@ namespace Mdex {
             Gtk.TextIter scroll_iter;
             editor.buffer.get_iter_at_line (out scroll_iter, top_line);
             editor.view.scroll_to_iter (scroll_iter, 0, false, 0, 0);
+        }
+
+        private void on_new_clicked () {
+            var dialog = new Gtk.FileDialog () {
+                title = "New Markdown File",
+                initial_name = "untitled.md",
+            };
+            dialog.save.begin (this, null, (obj, res) => {
+                try {
+                    var file = dialog.save.end (res);
+                    if (file != null) {
+                        new_requested (file);
+                    }
+                } catch (GLib.Error e) {
+                    // User cancelled — nothing to create.
+                }
+            });
         }
 
         private void on_open_clicked () {

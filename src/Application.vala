@@ -11,7 +11,7 @@ namespace Mdex {
         private uint autosave_id = 0;
 
         private const string USAGE = """Usage:
-  mdex [FILE]     open FILE, or restore the scratch buffer
+  mdex [FILE]     open FILE, or resume the last document
   ... | mdex      edit piped text as a scratch buffer
 
 Options:
@@ -20,9 +20,11 @@ Options:
 """;
 
         public Application () {
+            // NON_UNIQUE: each launch is its own instance, so two documents can
+            // sit side by side and piped stdin is read by the process that owns it.
             Object (
                 application_id: "com.github.svandragt.mdex",
-                flags: ApplicationFlags.HANDLES_COMMAND_LINE
+                flags: ApplicationFlags.HANDLES_COMMAND_LINE | ApplicationFlags.NON_UNIQUE
             );
         }
 
@@ -38,6 +40,7 @@ Options:
             if (window == null) {
                 window = new MainWindow (this);
                 window.open_requested.connect ((file) => open_file.begin (file));
+                window.new_requested.connect ((file) => create_file.begin (file));
                 window.text_changed.connect (schedule_autosave);
                 window.publish_requested.connect ((text) => publish.begin (text));
                 window.preview_ready.connect (() => on_preview_ready.begin ());
@@ -47,10 +50,22 @@ Options:
                 open_file.begin (GLib.File.new_for_commandline_arg (args[1]));
             } else if (!Posix.isatty (0) && read_stdin_if_any (out piped)) {
                 current_file = null;
+                remember (null);
                 window.set_text (Editor.unwrap (piped));
                 window.set_subtitle ("Scratch");
             } else {
-                restore_scratch ();
+                string path = "";
+                try {
+                    FileUtils.get_contents (last_file ().get_path (), out path);
+                } catch (GLib.FileError e) {
+                    // First run — nothing to resume.
+                }
+                path = path.strip ();
+                if (path != "" && GLib.FileUtils.test (path, GLib.FileTest.EXISTS)) {
+                    open_file.begin (GLib.File.new_for_path (path));
+                } else {
+                    restore_scratch ();
+                }
             }
 
             window.present ();
@@ -77,6 +92,7 @@ Options:
 
         private void restore_scratch () {
             current_file = null;
+            remember (null);
             window.set_subtitle ("Scratch");
 
             string contents;
@@ -103,6 +119,7 @@ Options:
                 window.set_text (Editor.unwrap ((string) contents));
                 current_file = file;
                 current_etag = etag;
+                remember (file);
                 window.set_subtitle (file.get_basename ());
                 watch (file);
             } catch (GLib.Error e) {
@@ -139,6 +156,32 @@ Options:
             string dir = Path.build_filename (GLib.Environment.get_user_cache_dir (), "mdex");
             DirUtils.create_with_parents (dir, 0700);
             return GLib.File.new_for_path (Path.build_filename (dir, "scratch.md"));
+        }
+
+        /** Path of the last document, or empty for the scratch buffer, so a plain launch resumes it. */
+        private GLib.File last_file () {
+            return scratch_file ().get_parent ().get_child ("last");
+        }
+
+        private void remember (GLib.File? file) {
+            try {
+                FileUtils.set_contents (last_file ().get_path (), file != null ? file.get_path () : "");
+            } catch (GLib.FileError e) {
+                warning ("could not record last file: %s", e.message);
+            }
+        }
+
+        /** Creates an empty file and opens it, so autosave has somewhere to go from the first keystroke. */
+        private async void create_file (GLib.File file) {
+            try {
+                string? new_etag;
+                yield file.replace_contents_async ("".data, null, false, GLib.FileCreateFlags.NONE, null, out new_etag);
+            } catch (GLib.Error e) {
+                warning ("could not create %s: %s", file.get_path (), e.message);
+                window.show_toast ("Could not create file");
+                return;
+            }
+            yield open_file (file);
         }
 
         private void schedule_autosave (string text) {

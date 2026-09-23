@@ -31,18 +31,19 @@ sudo make install PREFIX=/usr/local
 
 ## Use it
 
-Open a file with the button in the header bar, pass a path on the command line,
-or pipe text in:
+Start a new file with the New button or Ctrl+N, open an existing one with the
+Open button or Ctrl+O, pass a path on the command line, or pipe text in:
 
 ```
 mdex notes.md
 claude -p "draft the release notes" | mdex
 ```
 
-With no input, mdex starts on a scratch buffer. Everything autosaves a second
-after you stop typing — to the file you opened, or to
-`~/.cache/mdex/scratch.md` when there isn't one, so an unnamed session survives
-a restart.
+With no input, mdex reopens the document you had last time, or a scratch
+buffer if there wasn't one. Everything autosaves a second after you stop
+typing — to the file you opened, or to `~/.cache/mdex/scratch.md` when there
+isn't one, so an unnamed session survives a restart. Every launch is a
+separate instance, so run `mdex` twice to work on two documents side by side.
 
 Export from the header bar menu, or with a shortcut:
 
@@ -76,7 +77,7 @@ Text from a language model usually arrives hard-wrapped at about 80 columns.
 mdex treats those wraps as an artefact of how the text was written, not as
 meaning:
 
-- Anything you open, pipe in, or restore from the scratch buffer has its
+- Anything you open, pipe in, paste, or restore from the scratch buffer has its
   paragraphs unwrapped on load: the hard newlines inside a paragraph go, and it
   becomes one line. Headings, lists, quotes, tables and code blocks keep their
   shape, and a deliberate line break — two trailing spaces — survives.
@@ -89,7 +90,7 @@ meaning:
 
 Unwrapping rewrites the document, and autosave will keep it, so opening a
 hard-wrapped file and typing one character reformats its paragraphs. Press
-Ctrl+Shift+U to reflow text you pasted into an already-open document.
+Ctrl+Shift+U to reflow text that arrived some other way.
 
 ## Write a plugin
 

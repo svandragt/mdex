@@ -37,6 +37,28 @@ namespace Mdex {
 
             buffer.changed.connect (() => text_changed ());
 
+            // Pasted text gets the same reflow as opened text. This runs before the
+            // class handler (RUN_LAST), so stopping emission replaces the default paste.
+            view.paste_clipboard.connect (() => {
+                GLib.Signal.stop_emission_by_name (view, "paste-clipboard");
+                var clipboard = view.get_clipboard ();
+                clipboard.read_text_async.begin (null, (obj, res) => {
+                    try {
+                        string? text = clipboard.read_text_async.end (res);
+                        if (text == null) {
+                            return;
+                        }
+                        buffer.begin_user_action ();
+                        buffer.delete_selection (true, view.editable);
+                        buffer.insert_at_cursor (unwrap (text), -1);
+                        buffer.end_user_action ();
+                        view.scroll_mark_onscreen (buffer.get_insert ());
+                    } catch (GLib.Error e) {
+                        // Nothing textual on the clipboard.
+                    }
+                });
+            });
+
             update_style_scheme (Granite.Settings.get_default ().prefers_color_scheme
                 == Granite.Settings.ColorScheme.DARK);
         }
