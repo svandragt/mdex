@@ -91,6 +91,20 @@ Unwrapping rewrites the document, and autosave will keep it, so opening a
 hard-wrapped file and typing one character reformats its paragraphs. Press
 Ctrl+Shift+U to reflow text that arrived some other way.
 
+## Format as you type
+
+| Shortcut | Does |
+|---|---|
+| Ctrl+B | Wrap the selection in `**bold**` |
+| Ctrl+I | Wrap the selection in `_italic_` |
+| Ctrl+L | Turn the selection into `[a link]()`, cursor in the brackets |
+| Ctrl+1 to Ctrl+6 | Make the current line a heading of that level |
+| Ctrl+0 | Remove the heading |
+
+With nothing selected, the markers go in at the cursor with the cursor
+between them. Pasting a URL over selected text links it: select the words,
+paste, done.
+
 ## Write a plugin
 
 An exporter is a JavaScript file in `~/.config/mdex/plugins/`. It gets the

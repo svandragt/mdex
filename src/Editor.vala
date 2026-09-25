@@ -49,8 +49,12 @@ namespace Mdex {
                             return;
                         }
                         buffer.begin_user_action ();
-                        buffer.delete_selection (true, view.editable);
-                        buffer.insert_at_cursor (unwrap (text), -1);
+                        if (buffer.has_selection && is_url (text)) {
+                            wrap_selection ("[", "](" + text.strip () + ")");
+                        } else {
+                            buffer.delete_selection (true, view.editable);
+                            buffer.insert_at_cursor (unwrap (text), -1);
+                        }
                         buffer.end_user_action ();
                         view.scroll_mark_onscreen (buffer.get_insert ());
                     } catch (GLib.Error e) {
@@ -59,8 +63,73 @@ namespace Mdex {
                 });
             });
 
+            var keys = new Gtk.EventControllerKey ();
+            keys.propagation_phase = Gtk.PropagationPhase.CAPTURE;
+            keys.key_pressed.connect (on_key_pressed);
+            view.add_controller (keys);
+
             update_style_scheme (Granite.Settings.get_default ().prefers_color_scheme
                 == Granite.Settings.ColorScheme.DARK);
+        }
+
+        private bool on_key_pressed (uint keyval, uint keycode, Gdk.ModifierType state) {
+            if ((state & Gdk.MODIFIER_MASK) != Gdk.ModifierType.CONTROL_MASK) {
+                return false;
+            }
+            switch (keyval) {
+                case Gdk.Key.b: wrap_selection ("**", "**"); return true;
+                case Gdk.Key.i: wrap_selection ("_", "_"); return true;
+                case Gdk.Key.l: wrap_selection ("[", "]()", 1); return true;
+            }
+            if (keyval >= Gdk.Key.@0 && keyval <= Gdk.Key.@6) {
+                set_heading ((int) (keyval - Gdk.Key.@0));
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * Wraps the selection (or an empty span at the cursor) in before/after
+         * and leaves the cursor `back` characters before the end of `after`,
+         * which also puts an empty wrap's cursor between the markers.
+         */
+        private void wrap_selection (string before, string after, int back = 0) {
+            Gtk.TextIter start, end;
+            buffer.get_selection_bounds (out start, out end);
+            string inner = buffer.get_text (start, end, false);
+            buffer.begin_user_action ();
+            buffer.delete (ref start, ref end);
+            buffer.insert (ref start, before + inner + after, -1);
+            start.backward_chars (inner == "" ? after.length : back);
+            buffer.place_cursor (start);
+            buffer.end_user_action ();
+        }
+
+        /** Sets the cursor line's ATX heading level; 0 removes it. */
+        private void set_heading (int level) {
+            Gtk.TextIter start;
+            buffer.get_iter_at_mark (out start, buffer.get_insert ());
+            start.set_line_offset (0);
+            var end = start;
+            if (!end.ends_line ()) {
+                end.forward_to_line_end ();
+            }
+            string line = buffer.get_text (start, end, false);
+            string rest = line;
+            try {
+                rest = new Regex ("^#{1,6}\\s*").replace (line, -1, 0, "");
+            } catch (RegexError e) {
+                // pattern is constant
+            }
+            buffer.begin_user_action ();
+            buffer.delete (ref start, ref end);
+            buffer.insert (ref start, (level > 0 ? string.nfill (level, '#') + " " : "") + rest, -1);
+            buffer.end_user_action ();
+        }
+
+        private static bool is_url (string text) {
+            string t = text.strip ();
+            return (t.has_prefix ("http://") || t.has_prefix ("https://")) && !Regex.match_simple ("\\s", t);
         }
 
         public string get_text () {
