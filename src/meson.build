@@ -6,6 +6,7 @@ mdex_sources = files(
   'MainWindow.vala',
   'Editor.vala',
   'Preview.vala',
+  'Revisions.vala',
 )
 
 executable(

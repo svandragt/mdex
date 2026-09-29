@@ -25,6 +25,12 @@ namespace Mdex {
         public signal void text_changed (string text);
         /** Fired when the user confirms publishing the buffer to their blog. */
         public signal void publish_requested (string text);
+        /** Fired when the user asks for a snapshot of the buffer. */
+        public signal void snapshot_requested (string text);
+        /** Fired after an export lands on the clipboard: a version went out, so it is worth keeping. */
+        public signal void export_done (string text);
+        /** Fired when the user opens the revisions window. */
+        public signal void revisions_requested (string text);
 
         public MainWindow (Gtk.Application app) {
             Object (application: app);
@@ -70,6 +76,12 @@ namespace Mdex {
             };
             open_button.clicked.connect (on_open_clicked);
             header.pack_start (open_button);
+
+            var revisions_button = new Gtk.Button.from_icon_name ("document-open-recent-symbolic") {
+                tooltip_text = "Revisions…",
+            };
+            revisions_button.clicked.connect (() => revisions_requested (editor.get_text ()));
+            header.pack_start (revisions_button);
 
             export_button = new Gtk.MenuButton () {
                 label = "Export",
@@ -131,6 +143,12 @@ namespace Mdex {
             var scratch_action = new SimpleAction ("scratch", null);
             scratch_action.activate.connect (() => scratch_requested ());
             edit_actions.add_action (scratch_action);
+            var snapshot_action = new SimpleAction ("snapshot", null);
+            snapshot_action.activate.connect (() => snapshot_requested (editor.get_text ()));
+            edit_actions.add_action (snapshot_action);
+            var revisions_action = new SimpleAction ("revisions", null);
+            revisions_action.activate.connect (() => revisions_requested (editor.get_text ()));
+            edit_actions.add_action (revisions_action);
             insert_action_group ("edit", edit_actions);
 
             Granite.Settings.get_default ().notify["prefers-color-scheme"].connect (update_theme);
@@ -154,6 +172,8 @@ namespace Mdex {
             application.set_accels_for_action ("edit.new", { "<Control>n" });
             application.set_accels_for_action ("edit.open", { "<Control>o" });
             application.set_accels_for_action ("edit.scratch", { "<Control><Shift>n" });
+            application.set_accels_for_action ("edit.snapshot", { "<Control>s" });
+            application.set_accels_for_action ("edit.revisions", { "<Control>h" });
             preview_ready ();
         }
 
@@ -356,6 +376,7 @@ namespace Mdex {
                     clipboard.set_text (text);
                 }
                 show_toast ("Copied %s to clipboard".printf (label));
+                export_done (editor.get_text ());
             } catch (GLib.Error e) {
                 warning ("export %s failed: %s", id, e.message);
                 show_toast ("Export to %s failed".printf (label));
