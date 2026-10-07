@@ -8,3 +8,8 @@ Icon=com.github.svandragt.mdex
 Terminal=false
 Categories=Utility;TextEditor;
 MimeType=text/markdown;
+Actions=NewWindow;
+
+[Desktop Action NewWindow]
+Name=New Window
+Exec=mdex
