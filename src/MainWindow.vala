@@ -188,6 +188,7 @@ namespace Mdex {
 
         public void set_subtitle (string text) {
             subtitle_label.label = text;
+            title = text + " — Mdex";
         }
 
         public void show_toast (string title) {
