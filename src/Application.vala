@@ -12,9 +12,12 @@ namespace Mdex {
         private Revisions revisions;
         private string last_saved = "";
         private int64 last_edit = 0;
+        // A New Window document lives in the cache until its first manual snapshot asks where to keep it.
+        private bool untitled = false;
 
         private const string USAGE = """Usage:
   mdex [FILE]     open FILE, or resume the last document
+  mdex --new      start a blank document
   ... | mdex      edit piped text as a scratch buffer
 
 Options:
@@ -48,6 +51,10 @@ Options:
                 window.text_changed.connect (schedule_autosave);
                 window.publish_requested.connect ((text) => publish.begin (text));
                 window.snapshot_requested.connect ((text) => {
+                    if (untitled) {
+                        keep_untitled.begin (text);
+                        return;
+                    }
                     window.show_toast (revisions.snapshot (text, "manual") ? "Snapshot taken" : "Nothing changed since the last snapshot");
                 });
                 window.export_done.connect ((text) => revisions.snapshot (text, "export"));
@@ -78,7 +85,11 @@ Options:
                 set_accels_for_action ("app.quit", { "<Control>q" });
             }
 
-            if (args.length > 1) {
+            if (args.length > 1 && args[1] == "--new") {
+                untitled = true;
+                var name = "untitled-" + GLib.get_real_time ().to_string () + ".md";
+                create_file.begin (scratch_file ().get_parent ().get_child (name));
+            } else if (args.length > 1) {
                 open_file.begin (GLib.File.new_for_commandline_arg (args[1]));
             } else if (!Posix.isatty (0) && read_stdin_if_any (out piped)) {
                 current_file = null;
@@ -189,7 +200,7 @@ Options:
                 current_file = file;
                 current_etag = etag;
                 remember (file);
-                window.set_subtitle (file.get_basename ());
+                window.set_subtitle (untitled ? "Untitled" : file.get_basename ());
                 watch (file);
                 if (!same_file) {
                     track (file, false);
@@ -255,6 +266,26 @@ Options:
                 return;
             }
             yield open_file (file);
+        }
+
+        /** Moves the untitled document to where the user picks, then takes the snapshot they asked for. */
+        private async void keep_untitled (string text) {
+            var dest = yield window.ask_save_location ();
+            if (dest == null) {
+                return;
+            }
+            save_now (text);
+            try {
+                current_file.move (dest, GLib.FileCopyFlags.OVERWRITE, null, null);
+            } catch (GLib.Error e) {
+                warning ("could not move to %s: %s", dest.get_path (), e.message);
+                window.show_toast ("Could not save file");
+                return;
+            }
+            untitled = false;
+            yield open_file (dest);
+            revisions.snapshot (text, "manual");
+            window.show_toast ("Saved and snapshot taken");
         }
 
         private const int64 IDLE_SNAPSHOT_USEC = 5 * 60 * GLib.TimeSpan.SECOND;

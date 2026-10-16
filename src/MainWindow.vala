@@ -248,6 +248,19 @@ namespace Mdex {
             });
         }
 
+        /** Asks where to keep an untitled document; null when the user cancels. */
+        public async GLib.File? ask_save_location () {
+            var dialog = new Gtk.FileDialog () {
+                title = "Save Markdown File",
+                initial_name = "untitled.md",
+            };
+            try {
+                return yield dialog.save (this, null);
+            } catch (GLib.Error e) {
+                return null;
+            }
+        }
+
         private void on_open_clicked () {
             var dialog = new Gtk.FileDialog () {
                 title = "Open Markdown File",
