@@ -350,7 +350,8 @@ namespace Mdex {
 
         private async void run_export (string id, string label) {
             try {
-                string json = yield preview.run (id, editor.get_text ());
+                string? selection = editor.get_selected_text ();
+                string json = yield preview.run (id, selection ?? editor.get_text ());
 
                 Json.Node? root = null;
                 try {
@@ -389,7 +390,7 @@ namespace Mdex {
                 } else {
                     clipboard.set_text (text);
                 }
-                show_toast ("Copied %s to clipboard".printf (label));
+                show_toast ((selection != null ? "Copied selection as %s" : "Copied %s to clipboard").printf (label));
                 export_done (editor.get_text ());
             } catch (GLib.Error e) {
                 warning ("export %s failed: %s", id, e.message);

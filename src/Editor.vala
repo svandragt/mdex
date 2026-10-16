@@ -138,6 +138,15 @@ namespace Mdex {
             return buffer.get_text (start, end, false);
         }
 
+        /** Returns the selected text, or null when nothing is selected. */
+        public string? get_selected_text () {
+            Gtk.TextIter start, end;
+            if (!buffer.get_selection_bounds (out start, out end)) {
+                return null;
+            }
+            return buffer.get_text (start, end, false);
+        }
+
         public void set_text (string text) {
             buffer.begin_irreversible_action ();
             buffer.text = text;
