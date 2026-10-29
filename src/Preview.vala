@@ -108,6 +108,19 @@ namespace Mdex {
             }
         }
 
+        /** Selects and scrolls to the nth (1-based) occurrence of text. */
+        public async void reveal (string text, int n) {
+            var b = new GLib.VariantBuilder (new GLib.VariantType ("a{sv}"));
+            b.add ("{sv}", "text", new GLib.Variant.string (text));
+            b.add ("{sv}", "n", new GLib.Variant.int32 (n));
+            try {
+                yield call_async_javascript_function (
+                    "return window.mdex.reveal(text, n);", -1, b.end (), null, null, null);
+            } catch (GLib.Error e) {
+                warning ("reveal failed: %s", e.message);
+            }
+        }
+
         /** Returns the exporter list as a JSON string, or "[]" on error. */
         public async string list () {
             try {

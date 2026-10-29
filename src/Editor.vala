@@ -6,9 +6,16 @@ namespace Mdex {
         public GtkSource.View view;
         public GtkSource.Buffer buffer;
 
+        private Gtk.SearchBar search_bar;
+        private Gtk.SearchEntry search_entry;
+        private GtkSource.SearchContext search;
+
         public signal void text_changed ();
+        /** The search selected the nth (1-based) occurrence of text. */
+        public signal void match_selected (string text, int n);
 
         construct {
+            orientation = Gtk.Orientation.VERTICAL;
             buffer = new GtkSource.Buffer (null);
 
             var lang = GtkSource.LanguageManager.get_default ().get_language ("markdown");
@@ -30,6 +37,40 @@ namespace Mdex {
                 hexpand = true,
                 vexpand = true,
             };
+            search = new GtkSource.SearchContext (buffer, new GtkSource.SearchSettings () {
+                wrap_around = true,
+            });
+            search_entry = new Gtk.SearchEntry () { hexpand = true };
+            // Typing extends the current match; Enter and Ctrl+G move past it.
+            search_entry.search_changed.connect (() => {
+                search.settings.search_text = search_entry.text;
+                find (true, false);
+            });
+            search_entry.activate.connect (() => find (true, true));
+            search_entry.next_match.connect (() => find (true, true));
+            var entry_keys = new Gtk.EventControllerKey ();
+            entry_keys.key_pressed.connect ((keyval, keycode, state) => {
+                if (keyval == Gdk.Key.Return && (state & Gdk.MODIFIER_MASK) == Gdk.ModifierType.SHIFT_MASK) {
+                    find (false, true);
+                    return true;
+                }
+                return false;
+            });
+            search_entry.add_controller (entry_keys);
+
+            search_bar = new Gtk.SearchBar () {
+                child = search_entry,
+                show_close_button = true,
+            };
+            search_bar.connect_entry (search_entry);
+            search_bar.bind_property ("search-mode-enabled", search, "highlight", BindingFlags.SYNC_CREATE);
+            search_bar.notify["search-mode-enabled"].connect (() => {
+                if (!search_bar.search_mode_enabled) {
+                    view.grab_focus ();
+                }
+            });
+
+            append (search_bar);
             append (scrolled);
 
             hexpand = true;
@@ -80,6 +121,7 @@ namespace Mdex {
                 case Gdk.Key.b: wrap_selection ("**", "**"); return true;
                 case Gdk.Key.i: wrap_selection ("_", "_"); return true;
                 case Gdk.Key.l: wrap_selection ("[", "]()", 1); return true;
+                case Gdk.Key.f: start_search (); return true;
             }
             if (keyval >= Gdk.Key.@0 && keyval <= Gdk.Key.@6) {
                 set_heading ((int) (keyval - Gdk.Key.@0));
@@ -103,6 +145,59 @@ namespace Mdex {
             start.backward_chars (inner == "" ? after.length : back);
             buffer.place_cursor (start);
             buffer.end_user_action ();
+        }
+
+        /** Opens the search bar, seeded with a one-line selection. */
+        private void start_search () {
+            string? selected = get_selected_text ();
+            if (selected != null && !selected.contains ("\n")) {
+                search_entry.text = selected;
+            }
+            search_bar.search_mode_enabled = true;
+            search_entry.grab_focus ();
+        }
+
+        /**
+         * Selects the next match in the given direction and scrolls to it.
+         * `skip_current` starts past the current selection; otherwise the
+         * search starts at its start, so a match that still fits stays put.
+         */
+        private void find (bool forward, bool skip_current) {
+            search_entry.remove_css_class ("error");
+            if (search_entry.text == "") {
+                return;
+            }
+            Gtk.TextIter start, end, match_start, match_end;
+            buffer.get_selection_bounds (out start, out end);
+            bool wrapped;
+            bool found = forward
+                ? search.forward (skip_current ? end : start, out match_start, out match_end, out wrapped)
+                : search.backward (start, out match_start, out match_end, out wrapped);
+            if (!found) {
+                search_entry.add_css_class ("error");
+                return;
+            }
+            buffer.select_range (match_start, match_end);
+            view.scroll_to_iter (match_start, 0.1, false, 0, 0);
+            match_selected (search_entry.text, occurrence_number (match_start));
+        }
+
+        /**
+         * Counts matches from the buffer start up to `match_start`. Not
+         * get_occurrence_position (): it returns -1 until the background
+         * scan finishes, which is mid-typing.
+         */
+        private int occurrence_number (Gtk.TextIter match_start) {
+            Gtk.TextIter iter, s, e;
+            buffer.get_start_iter (out iter);
+            bool wrapped;
+            int n = 0;
+            while (search.forward (iter, out s, out e, out wrapped) && !wrapped
+                   && s.compare (match_start) <= 0) {
+                n++;
+                iter = e;
+            }
+            return n;
         }
 
         /** Sets the cursor line's ATX heading level; 0 removes it. */

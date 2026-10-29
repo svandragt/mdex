@@ -90,6 +90,7 @@ Unwrapping rewrites the document, and autosave will keep it, so opening a hard-w
 | Ctrl+L | Turn the selection into `[a link]()`, cursor in the brackets |
 | Ctrl+1 to Ctrl+6 | Make the current line a heading of that level |
 | Ctrl+0 | Remove the heading |
+| Ctrl+F | Search the document. Enter or Ctrl+G goes to the next match, Shift+Enter to the previous one, and Esc closes the search bar |
 
 With nothing selected, the markers go in at the cursor with the cursor between them. Pasting a URL over selected text links it: select the words, paste, done.
 

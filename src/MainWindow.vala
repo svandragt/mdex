@@ -126,6 +126,7 @@ namespace Mdex {
                 preview.queue_render (text);
                 text_changed (text);
             });
+            editor.match_selected.connect ((text, n) => preview.reveal.begin (text, n));
 
             export_actions = new SimpleActionGroup ();
             insert_action_group ("export", export_actions);

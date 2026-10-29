@@ -171,6 +171,32 @@ html, body {
       return "";
     },
 
+    // Selects the nth (1-based) case-insensitive occurrence of text in the
+    // rendered output and scrolls it into view; past the last, the last.
+    // shortcut: counts rendered text only, so a source match inside markdown
+    // syntax or a URL shifts the count; source positions from marked fix it.
+    reveal(text, n) {
+      const needle = text.toLowerCase();
+      const walker = document.createTreeWalker(output, NodeFilter.SHOW_TEXT);
+      let hit = null;
+      search: for (let node; (node = walker.nextNode());) {
+        const hay = node.data.toLowerCase();
+        for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + 1)) {
+          hit = { node: node, i: i };
+          if (--n <= 0) break search;
+        }
+      }
+      if (!hit) return "";
+      const range = document.createRange();
+      range.setStart(hit.node, hit.i);
+      range.setEnd(hit.node, hit.i + needle.length);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      window.scrollBy(0, range.getBoundingClientRect().top - window.innerHeight * 0.3);
+      return "";
+    },
+
     list() {
       return JSON.stringify(
         exporters.map(function (e) { return { id: e.id, label: e.label }; })
