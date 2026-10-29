@@ -10,12 +10,24 @@
     return (tokens || []).map(inlineToken).join("");
   }
 
+  // Slack pairs markers by position, so a marker inside the same marker
+  // closes the outer one early. Text already inside one is emitted bare.
+  const open = { "*": false, "_": false };
+
+  function emphasis(mark, render) {
+    if (open[mark]) return render();
+    open[mark] = true;
+    const s = mark + render() + mark;
+    open[mark] = false;
+    return s;
+  }
+
   function inlineToken(t) {
     switch (t.type) {
       case "strong":
-        return "*" + inline(t.tokens) + "*";
+        return emphasis("*", function () { return inline(t.tokens); });
       case "em":
-        return "_" + inline(t.tokens) + "_";
+        return emphasis("_", function () { return inline(t.tokens); });
       case "del":
         return "~" + inline(t.tokens) + "~";
       case "codespan":
@@ -60,7 +72,7 @@
         return "---";
       case "heading":
         // No heading levels in Slack — a bold line stands in for all of them.
-        return "*" + inlineBlock(t.tokens) + "*";
+        return emphasis("*", function () { return inlineBlock(t.tokens); });
       case "paragraph":
         return inlineBlock(t.tokens);
       case "text":

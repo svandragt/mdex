@@ -46,6 +46,17 @@ const link = run("slack", "See [burohappold#558](https://example.com/pull/558) t
 assert.strictEqual(link, "See [burohappold#558](https://example.com/pull/558) today.");
 assert.strictEqual(run("slack", "<https://example.com/bare>"), "https://example.com/bare");
 
+// A heading exports as one bold line, so emphasis inside it adds no markers
+// of its own: nested asterisks make Slack pair them wrongly. Italic inside
+// bold is valid Slack and stays.
+assert.strictEqual(run("slack", "#### H4 with **bold** inside"), "*H4 with bold inside*");
+assert.strictEqual(run("slack", "## H2 with *italic* inside"), "*H2 with _italic_ inside*");
+assert.strictEqual(run("slack", "*outer _inner_ outer*"), "_outer inner outer_");
+assert.strictEqual(run("slack", "**outer __inner__ outer**"), "*outer inner outer*");
+// Headings and emphasis without nesting are unchanged.
+assert.strictEqual(run("slack", "## Plain heading"), "*Plain heading*");
+assert.strictEqual(run("slack", "Some **bold** and *italic* text."), "Some *bold* and _italic_ text.");
+
 // Slack's HTML flavour carries the preview pane's links.
 const linkHtml = runHtml("slack", "See [burohappold#558](https://example.com/pull/558) today.");
 assert.ok(linkHtml.includes('<a href="https://example.com/pull/558"'), linkHtml);
