@@ -41,6 +41,15 @@ public static int main (string[] args) {
                             "    code line\n    next line\n");
     check ("table", "| a | b |\n| - | - |\n", "| a | b |\n| - | - |\n");
 
+    // Definitions are one block each: joining them breaks the footnote or link.
+    check ("footnote definitions", "Some text.\n\n[^a]: First note.\n[^b]: Second note.\n",
+                                   "Some text.\n\n[^a]: First note.\n[^b]: Second note.\n");
+    check ("footnote after paragraph", "Some text.\n[^a]: First note.\n",
+                                       "Some text.\n[^a]: First note.\n");
+    check ("link definitions", "[a]: https://example.com\n[b]: https://example.org\n",
+                               "[a]: https://example.com\n[b]: https://example.org\n");
+    check ("bracket text still joins", "A para that\n[wraps] here.\n", "A para that [wraps] here.\n");
+
     // Two trailing spaces are a deliberate break, not a wrap.
     check ("hard break", "line one  \nline two\n", "line one  \nline two\n");
 

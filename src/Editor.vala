@@ -168,7 +168,7 @@ namespace Mdex {
          * following plain-text line belong to them, and to whatever already
          * joined onto them. TERMINAL block starts never absorb a follow-on
          * line (headings, indented code, tables, thematic breaks/setext
-         * underlines, HTML blocks).
+         * underlines, HTML blocks, footnote and link reference definitions).
          */
         private enum LineKind {
             TEXT,
@@ -179,10 +179,11 @@ namespace Mdex {
 
         /**
          * Joins hard-wrapped paragraph lines into one line each. Fenced and
-         * indented code, headings, tables, thematic breaks/setext underlines
-         * and HTML blocks are left untouched, list items and block quotes
-         * absorb their lazy-continuation lines, and a trailing hard break
-         * (two+ spaces or a backslash) stops a join.
+         * indented code, headings, tables, thematic breaks/setext underlines,
+         * HTML blocks and footnote/link reference definitions are left
+         * untouched, list items and block quotes absorb their
+         * lazy-continuation lines, and a trailing hard break (two+ spaces or
+         * a backslash) stops a join.
          */
         public static string unwrap (string text) {
             bool trailing_newline = text.has_suffix ("\n");
@@ -316,6 +317,9 @@ namespace Mdex {
             if (Regex.match_simple ("^(?:[-*_] *){3,}$", rest)
                 || Regex.match_simple ("^=+ *$", rest)) {
                 return LineKind.TERMINAL; // thematic break / setext underline
+            }
+            if (Regex.match_simple ("^\\[[^\\]]+\\]:", rest)) {
+                return LineKind.TERMINAL; // footnote or link reference definition
             }
             return LineKind.TEXT;
         }
