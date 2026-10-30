@@ -47,6 +47,7 @@ Options:
                 window = new MainWindow (this);
                 window.open_requested.connect ((file) => open_file.begin (file));
                 window.new_requested.connect ((file) => create_file.begin (file));
+                window.copy_requested.connect ((file) => save_copy.begin (file));
                 window.scratch_requested.connect (start_scratch);
                 window.text_changed.connect (schedule_autosave);
                 window.publish_requested.connect ((text) => publish.begin (text));
@@ -266,6 +267,19 @@ Options:
                 return;
             }
             yield open_file (file);
+        }
+
+        /** Writes the editor text to a file the user picked, leaving the open document and its autosave alone. */
+        private async void save_copy (GLib.File file) {
+            try {
+                string? new_etag;
+                yield file.replace_contents_async (window.get_text ().data, null, false, GLib.FileCreateFlags.NONE, null, out new_etag);
+            } catch (GLib.Error e) {
+                warning ("could not copy to %s: %s", file.get_path (), e.message);
+                window.show_toast ("Could not save a copy");
+                return;
+            }
+            window.show_toast ("Copy saved");
         }
 
         /** Moves the untitled document to where the user picks, then takes the snapshot they asked for. */

@@ -24,7 +24,7 @@ sudo make install PREFIX=/usr/local
 
 ## Use it
 
-Start an empty scratch buffer with the first header button or Ctrl+Shift+N, a new file with the next one or Ctrl+N, open an existing one with Ctrl+O, pass a path on the command line, or pipe text in. Ctrl+Q saves and quits:
+Start an empty scratch buffer with the first header button or Ctrl+Shift+N, a new file with the next one or Ctrl+N, open an existing one with Ctrl+O, save a copy of the text to another file with the save button or Ctrl+Shift+S, pass a path on the command line, or pipe text in. Ctrl+Q saves and quits:
 
 ```
 mdex notes.md

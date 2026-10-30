@@ -19,6 +19,8 @@ namespace Mdex {
         public signal void open_requested (GLib.File file);
         /** Fired when the user picks a location for a new file; it does not exist yet. */
         public signal void new_requested (GLib.File file);
+        /** Fired when the user picks where to write a copy of the current text; the window keeps its document. */
+        public signal void copy_requested (GLib.File file);
         /** Fired when the user wants an empty scratch buffer, autosaved to the cache rather than a file. */
         public signal void scratch_requested ();
         /** Fired on every edit, for the Application to debounce into an autosave. */
@@ -70,6 +72,12 @@ namespace Mdex {
             };
             new_button.clicked.connect (on_new_clicked);
             header.pack_start (new_button);
+
+            var copy_button = new Gtk.Button.from_icon_name ("document-save-symbolic") {
+                tooltip_text = "Save a copy…",
+            };
+            copy_button.clicked.connect (on_copy_clicked);
+            header.pack_start (copy_button);
 
             var open_button = new Gtk.Button.from_icon_name ("document-open-symbolic") {
                 tooltip_text = "Open…",
@@ -138,6 +146,9 @@ namespace Mdex {
             var new_action = new SimpleAction ("new", null);
             new_action.activate.connect (() => on_new_clicked ());
             edit_actions.add_action (new_action);
+            var copy_action = new SimpleAction ("copy", null);
+            copy_action.activate.connect (() => on_copy_clicked ());
+            edit_actions.add_action (copy_action);
             var open_action = new SimpleAction ("open", null);
             open_action.activate.connect (() => on_open_clicked ());
             edit_actions.add_action (open_action);
@@ -171,6 +182,7 @@ namespace Mdex {
             // once the yield above has actually suspended past construction.
             application.set_accels_for_action ("edit.unwrap", { "<Control><Shift>u" });
             application.set_accels_for_action ("edit.new", { "<Control>n" });
+            application.set_accels_for_action ("edit.copy", { "<Control><Shift>s" });
             application.set_accels_for_action ("edit.open", { "<Control>o" });
             application.set_accels_for_action ("edit.scratch", { "<Control><Shift>n" });
             application.set_accels_for_action ("edit.snapshot", { "<Control>s" });
@@ -245,6 +257,23 @@ namespace Mdex {
                     }
                 } catch (GLib.Error e) {
                     // User cancelled — nothing to create.
+                }
+            });
+        }
+
+        private void on_copy_clicked () {
+            var dialog = new Gtk.FileDialog () {
+                title = "Save a Copy",
+                initial_name = "copy.md",
+            };
+            dialog.save.begin (this, null, (obj, res) => {
+                try {
+                    var file = dialog.save.end (res);
+                    if (file != null) {
+                        copy_requested (file);
+                    }
+                } catch (GLib.Error e) {
+                    // User cancelled — nothing to copy.
                 }
             });
         }
