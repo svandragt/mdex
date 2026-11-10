@@ -8,6 +8,16 @@ unwrap_test = executable(
 
 test('unwrap', unwrap_test)
 
+# DocClaim.bus_name is a static string function too, so it compiles in on its
+# own; the D-Bus half needs a session bus and a second window, so it has no test.
+claim_test = executable(
+  'test-docclaim',
+  files('docclaim.vala') + claim_source,
+  dependencies: dependencies,
+)
+
+test('docclaim', claim_test)
+
 # The exporters are JavaScript, so this one runs under node when there is one.
 node = find_program('node', required: false)
 if node.found()

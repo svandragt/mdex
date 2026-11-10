@@ -9,6 +9,7 @@ namespace Mdex {
         private string? current_etag = null;
         private GLib.FileMonitor? monitor = null;
         private uint autosave_id = 0;
+        private DocClaim doc_claim = new DocClaim ();
         private Revisions revisions;
         private string last_saved = "";
         private int64 last_edit = 0;
@@ -43,10 +44,46 @@ Options:
                 return 0;
             }
 
+            // Decided before the window exists, so a launch that only forwards the file (or the resumed document) never builds one.
+            GLib.File? wanted = null;
+            bool have_piped = false;
+            if (args.length > 1 && args[1] != "--new") {
+                wanted = GLib.File.new_for_commandline_arg (args[1]);
+            } else if (args.length <= 1) {
+                if (!Posix.isatty (0) && read_stdin_if_any (out piped)) {
+                    have_piped = true;
+                } else {
+                    string path = "";
+                    try {
+                        FileUtils.get_contents (last_file ().get_path (), out path);
+                    } catch (GLib.FileError e) {
+                        // First run — nothing to resume.
+                    }
+                    path = path.strip ();
+                    if (path != "" && GLib.FileUtils.test (path, GLib.FileTest.EXISTS)) {
+                        wanted = GLib.File.new_for_path (path);
+                    }
+                }
+            }
+            if (wanted != null) {
+                string token = cmdline.getenv ("XDG_ACTIVATION_TOKEN") ?? cmdline.getenv ("DESKTOP_STARTUP_ID") ?? "";
+                if (open_elsewhere (wanted, token)) {
+                    return 0;
+                }
+            }
+
             if (window == null) {
                 window = new MainWindow (this);
-                window.open_requested.connect ((file) => open_file.begin (file));
-                window.new_requested.connect ((file) => create_file.begin (file));
+                window.open_requested.connect ((file) => {
+                    if (!open_elsewhere (file, activation_token ())) {
+                        open_file.begin (file);
+                    }
+                });
+                window.new_requested.connect ((file) => {
+                    if (!open_elsewhere (file, activation_token ())) {
+                        create_file.begin (file);
+                    }
+                });
                 window.copy_requested.connect ((file) => save_copy.begin (file));
                 window.scratch_requested.connect (start_scratch);
                 window.text_changed.connect (schedule_autosave);
@@ -70,6 +107,12 @@ Options:
                     dialog.present ();
                 });
                 window.preview_ready.connect (() => on_preview_ready.begin ());
+                doc_claim.present_requested.connect ((token) => {
+                    if (token != "") {
+                        window.set_startup_id (token);
+                    }
+                    window.present ();
+                });
                 // Autosave is debounced, so an edit made just before closing is still pending.
                 window.close_request.connect (() => {
                     if (autosave_id != 0) {
@@ -90,28 +133,18 @@ Options:
                 untitled = true;
                 var name = "untitled-" + GLib.get_real_time ().to_string () + ".md";
                 create_file.begin (scratch_file ().get_parent ().get_child (name));
-            } else if (args.length > 1) {
-                open_file.begin (GLib.File.new_for_commandline_arg (args[1]));
-            } else if (!Posix.isatty (0) && read_stdin_if_any (out piped)) {
+            } else if (wanted != null) {
+                open_file.begin (wanted);
+            } else if (have_piped) {
                 current_file = null;
+                doc_claim.release ();
                 remember (null);
                 track (null, true);
                 window.set_text (Editor.unwrap (piped));
                 window.set_subtitle ("Scratch");
                 revisions.snapshot (window.get_text (), "original");
             } else {
-                string path = "";
-                try {
-                    FileUtils.get_contents (last_file ().get_path (), out path);
-                } catch (GLib.FileError e) {
-                    // First run — nothing to resume.
-                }
-                path = path.strip ();
-                if (path != "" && GLib.FileUtils.test (path, GLib.FileTest.EXISTS)) {
-                    open_file.begin (GLib.File.new_for_path (path));
-                } else {
-                    restore_scratch ();
-                }
+                restore_scratch ();
             }
 
             window.present ();
@@ -138,6 +171,7 @@ Options:
 
         private void restore_scratch () {
             current_file = null;
+            doc_claim.release ();
             remember (null);
             track (null, false);
             window.set_subtitle ("Scratch");
@@ -173,10 +207,35 @@ Options:
                 monitor = null;
             }
             current_file = null;
+            doc_claim.release ();
             remember (null);
             window.set_text ("");
             track (null, true);
             window.set_subtitle ("Scratch");
+        }
+
+        /**
+         * Asks the window that already has file open to come forward, so it
+         * isn't opened twice. The window's own file is a reload, not a new open.
+         */
+        private bool open_elsewhere (GLib.File file, string token) {
+            string? path = file.get_path ();
+            if (path == null || (current_file != null && file.equal (current_file))) {
+                return false;
+            }
+            return DocClaim.present_owner (path, token);
+        }
+
+        /** A token from this window's last input, which lets Wayland let another window take focus. */
+        private string activation_token () {
+            try {
+                // GDK refuses to make a token without an AppInfo to name the requester.
+                var info = GLib.AppInfo.create_from_commandline ("mdex", "mdex", GLib.AppInfoCreateFlags.NONE);
+                return window.get_display ().get_app_launch_context ().get_startup_notify_id (info, new GLib.List<GLib.File> ()) ?? "";
+            } catch (GLib.Error e) {
+                warning ("no activation token: %s", e.message);
+                return "";
+            }
         }
 
         private async void open_file (GLib.File file) {
@@ -204,6 +263,7 @@ Options:
                 window.set_subtitle (untitled ? "Untitled" : file.get_basename ());
                 watch (file);
                 if (!same_file) {
+                    doc_claim.claim (file.get_path ());
                     track (file, false);
                     revisions.snapshot (text, "original");
                 }
