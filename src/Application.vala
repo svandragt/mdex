@@ -111,6 +111,7 @@ Options:
                     if (token != "") {
                         window.set_startup_id (token);
                     }
+                    window.editor.lock_until_click ();
                     window.present ();
                 });
                 // Autosave is debounced, so an edit made just before closing is still pending.
@@ -134,6 +135,10 @@ Options:
                 var name = "untitled-" + GLib.get_real_time ().to_string () + ".md";
                 create_file.begin (scratch_file ().get_parent ().get_child (name));
             } else if (wanted != null) {
+                // A path on the command line comes from another program; resuming the last file is the user's own plain launch.
+                if (args.length > 1) {
+                    window.editor.lock_until_click ();
+                }
                 open_file.begin (wanted);
             } else if (have_piped) {
                 current_file = null;

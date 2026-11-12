@@ -229,6 +229,9 @@ namespace Mdex {
 
         /** Rewrites the buffer with unwrapped text, as one undo step. */
         private void do_unwrap () {
+            if (!editor.view.editable) {
+                return;
+            }
             Gdk.Rectangle visible;
             editor.view.get_visible_rect (out visible);
             Gtk.TextIter top_iter;

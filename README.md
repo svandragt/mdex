@@ -31,6 +31,8 @@ mdex notes.md
 claude -p "draft the release notes" | mdex
 ```
 
+A file opened from the command line, or brought forward by a second launch, starts read-only, so typing meant for another window cannot end up in it. A banner says so, and a click in the text makes it editable.
+
 With no input, mdex reopens the document you had last time, or a scratch buffer if there wasn't one. Everything autosaves a second after you stop typing — to the file you opened, or to `~/.cache/mdex/scratch.md` when there isn't one, so an unnamed session survives a restart. Every launch is a separate instance, so run `mdex` twice to work on two documents side by side. A document that is already open in a window opens only there: opening it again from the command line, Ctrl+O or New file brings that window to the front.
 
 Export from the header bar menu, or with a shortcut:

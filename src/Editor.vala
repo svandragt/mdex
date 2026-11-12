@@ -5,6 +5,8 @@ namespace Mdex {
     public class Editor : Gtk.Box {
         public GtkSource.View view;
         public GtkSource.Buffer buffer;
+        /** Shown while the view is locked read-only. */
+        public Gtk.Label banner;
 
         private Gtk.SearchBar search_bar;
         private Gtk.SearchEntry search_entry;
@@ -70,7 +72,15 @@ namespace Mdex {
                 }
             });
 
+            banner = new Gtk.Label ("Read-only — click the text to edit") {
+                visible = false,
+                margin_top = 6,
+                margin_bottom = 6,
+            };
+            banner.add_css_class ("warning");
+
             append (search_bar);
+            append (banner);
             append (scrolled);
 
             hexpand = true;
@@ -82,6 +92,9 @@ namespace Mdex {
             // class handler (RUN_LAST), so stopping emission replaces the default paste.
             view.paste_clipboard.connect (() => {
                 GLib.Signal.stop_emission_by_name (view, "paste-clipboard");
+                if (!view.editable) {
+                    return;
+                }
                 var clipboard = view.get_clipboard ();
                 clipboard.read_text_async.begin (null, (obj, res) => {
                     try {
@@ -103,6 +116,12 @@ namespace Mdex {
                     }
                 });
             });
+
+            // Only a primary click unlocks, never a key. CAPTURE so the view's own handling of the click still runs.
+            var click = new Gtk.GestureClick () { button = Gdk.BUTTON_PRIMARY };
+            click.propagation_phase = Gtk.PropagationPhase.CAPTURE;
+            click.pressed.connect (() => unlock ());
+            view.add_controller (click);
 
             var keys = new Gtk.EventControllerKey ();
             keys.propagation_phase = Gtk.PropagationPhase.CAPTURE;
@@ -136,6 +155,9 @@ namespace Mdex {
          * which also puts an empty wrap's cursor between the markers.
          */
         private void wrap_selection (string before, string after, int back = 0) {
+            if (!view.editable) {
+                return;
+            }
             Gtk.TextIter start, end;
             buffer.get_selection_bounds (out start, out end);
             string inner = buffer.get_text (start, end, false);
@@ -202,6 +224,9 @@ namespace Mdex {
 
         /** Sets the cursor line's ATX heading level; 0 removes it. */
         private void set_heading (int level) {
+            if (!view.editable) {
+                return;
+            }
             Gtk.TextIter start;
             buffer.get_iter_at_mark (out start, buffer.get_insert ());
             start.set_line_offset (0);
@@ -246,6 +271,21 @@ namespace Mdex {
             buffer.begin_irreversible_action ();
             buffer.text = text;
             buffer.end_irreversible_action ();
+        }
+
+        /**
+         * Makes the view read-only until the user clicks in it. GTK4 cannot map
+         * a window without giving it focus, so a window another program opens
+         * would otherwise receive keystrokes typed for a different window.
+         */
+        public void lock_until_click () {
+            view.editable = false;
+            banner.visible = true;
+        }
+
+        public void unlock () {
+            view.editable = true;
+            banner.visible = false;
         }
 
         public void update_style_scheme (bool dark) {
