@@ -9,9 +9,27 @@ namespace Mdex {
         private string? pending_md = null;
         private uint debounce_id = 0;
 
+        /** The page asks to comment on this selection of the rendered text, which is this occurrence of the quote in it. */
+        public signal void comment_requested (string quote, int occurrence);
+        /** The page's highlight of this comment was clicked. */
+        public signal void comment_opened (string id);
+        /** A render replaced the page content, which wipes the comment marks. */
+        public signal void rendered ();
+
+        public Preview () {
+            // WebKit only makes its own manager after construct{} has run, and the handler below needs one now.
+            Object (user_content_manager: new WebKit.UserContentManager ());
+        }
+
         construct {
             hexpand = true;
             vexpand = true;
+
+            // The page's only message handler, so every message that arrives is its own.
+            // The vapi forbids a null world; WebKit reads it as the page's own world, where window.webkit lives.
+            string? page_world = null;
+            user_content_manager.register_script_message_handler ("mdex", page_world);
+            user_content_manager.script_message_received.connect (on_message);
 
             // The shell page is the whole preview; following a link inside it
             // would replace the renderer. Hand real URLs to the browser.
@@ -33,6 +51,36 @@ namespace Mdex {
                 }
                 return true;
             });
+        }
+
+        /** The page can post anything, so a message that is not a comment on a non-empty quote or an open of a non-empty id is dropped. */
+        private void on_message (JSC.Value value) {
+            try {
+                var parser = new Json.Parser ();
+                parser.load_from_data (value.to_json (0));
+                var root = parser.get_root ();
+                if (root == null || root.get_node_type () != Json.NodeType.OBJECT) {
+                    return;
+                }
+                var message = root.get_object ();
+                string? type = text_member (message, "type");
+                string? quote = text_member (message, "quote");
+                string? id = text_member (message, "id");
+                var count = message.get_member ("occurrence");
+                int64 occurrence = count != null && count.get_value_type () == typeof (int64) ? count.get_int () : 1;
+                if (type == "comment" && quote != null && quote.strip () != "") {
+                    comment_requested (quote, (int) occurrence.clamp (1, int.MAX));
+                } else if (type == "open" && id != null && id != "") {
+                    comment_opened (id);
+                }
+            } catch (GLib.Error e) {
+                warning ("unreadable message from the page: %s", e.message);
+            }
+        }
+
+        private static string? text_member (Json.Object message, string name) {
+            var node = message.get_member (name);
+            return node != null && node.get_value_type () == typeof (string) ? node.get_string () : null;
         }
 
         /** Assembles shell.html from the gresource bundle and loads it once. */
@@ -106,6 +154,71 @@ namespace Mdex {
             } catch (GLib.Error e) {
                 warning ("render failed: %s", e.message);
             }
+            rendered ();
+        }
+
+        /**
+         * Marks each comment's effective quote in the page and returns whether it was found. Empty until the page has loaded, or if the call fails.
+         * A marked passage shows the comment, and the reply under it, as its tooltip, and a click on it fires comment_opened.
+         */
+        public async bool[] mark_quotes (Comment[] comments) {
+            bool[] found = {};
+            if (!loaded) {
+                return found;
+            }
+            var list = new Json.Builder ();
+            list.begin_array ();
+            foreach (var c in comments) {
+                string title = c.body;
+                if ((c.reply ?? "").strip () != "") {
+                    title += "\n↳ " + c.reply;
+                }
+                list.begin_object ();
+                list.set_member_name ("id");
+                list.add_string_value (c.id);
+                list.set_member_name ("quote");
+                list.add_string_value (c.effective_quote ());
+                list.set_member_name ("occurrence");
+                list.add_int_value (c.effective_occurrence ());
+                list.set_member_name ("title");
+                list.add_string_value (title);
+                list.end_object ();
+            }
+            list.end_array ();
+            var b = new GLib.VariantBuilder (new GLib.VariantType ("a{sv}"));
+            b.add ("{sv}", "items", new GLib.Variant.string (Json.to_string (list.get_root (), false)));
+            try {
+                var result = yield call_async_javascript_function (
+                    "return JSON.stringify(window.mdex.markQuotes(JSON.parse(items)));", -1, b.end (), null, null, null);
+                var parser = new Json.Parser ();
+                parser.load_from_data (result.to_string ());
+                foreach (unowned Json.Node flag in parser.get_root ().get_array ().get_elements ()) {
+                    found += flag.get_boolean ();
+                }
+            } catch (GLib.Error e) {
+                warning ("mark_quotes failed: %s", e.message);
+                found = {};
+            }
+            return found;
+        }
+
+        /** Scrolls the page to the first piece of the nth (1-based) occurrence of quote, which may span bold, links or line breaks. Returns whether it was found. */
+        public async bool reveal_quote (string quote, int n) {
+            bool found = false;
+            if (!loaded) {
+                return found;
+            }
+            var b = new GLib.VariantBuilder (new GLib.VariantType ("a{sv}"));
+            b.add ("{sv}", "quote", new GLib.Variant.string (quote));
+            b.add ("{sv}", "n", new GLib.Variant.int32 (n));
+            try {
+                var result = yield call_async_javascript_function (
+                    "return window.mdex.revealQuote(quote, n);", -1, b.end (), null, null, null);
+                found = result.to_boolean ();
+            } catch (GLib.Error e) {
+                warning ("reveal_quote failed: %s", e.message);
+            }
+            return found;
         }
 
         /** Selects and scrolls to the nth (1-based) occurrence of text. */

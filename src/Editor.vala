@@ -7,6 +7,8 @@ namespace Mdex {
         public GtkSource.Buffer buffer;
         /** Shown while the view is locked read-only. */
         public Gtk.Label banner;
+        /** Shown from a change on disk under unsaved edits until the user picks Reload or Keep mine. */
+        public Gtk.Box reload_banner;
 
         private Gtk.SearchBar search_bar;
         private Gtk.SearchEntry search_entry;
@@ -15,6 +17,10 @@ namespace Mdex {
         public signal void text_changed ();
         /** The search selected the nth (1-based) occurrence of text. */
         public signal void match_selected (string text, int n);
+        /** The user took the offer to replace the buffer with the text now on disk. */
+        public signal void reload_requested (string text);
+
+        private string pending_reload = "";
 
         construct {
             orientation = Gtk.Orientation.VERTICAL;
@@ -79,8 +85,28 @@ namespace Mdex {
             };
             banner.add_css_class ("warning");
 
+            var reload_button = new Gtk.Button.with_label ("Reload");
+            var keep_button = new Gtk.Button.with_label ("Keep mine");
+            var reload_label = new Gtk.Label ("The file changed on disk");
+            reload_label.add_css_class ("warning");
+            reload_banner = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 12) {
+                visible = false,
+                halign = Gtk.Align.CENTER,
+                margin_top = 6,
+                margin_bottom = 6,
+            };
+            reload_banner.append (reload_label);
+            reload_banner.append (reload_button);
+            reload_banner.append (keep_button);
+            reload_button.clicked.connect (() => {
+                reload_banner.visible = false;
+                reload_requested (pending_reload);
+            });
+            keep_button.clicked.connect (withdraw_reload_offer);
+
             append (search_bar);
             append (banner);
+            append (reload_banner);
             append (scrolled);
 
             hexpand = true;
@@ -286,6 +312,17 @@ namespace Mdex {
         public void unlock () {
             view.editable = true;
             banner.visible = false;
+        }
+
+        /** Shows the reload banner for the text now on disk, replacing the text of any offer already showing. */
+        public void offer_reload (string text) {
+            pending_reload = text;
+            reload_banner.visible = true;
+        }
+
+        /** Hides the reload banner; the unsaved edits stay as they are. */
+        public void withdraw_reload_offer () {
+            reload_banner.visible = false;
         }
 
         public void update_style_scheme (bool dark) {

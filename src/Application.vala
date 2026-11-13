@@ -13,6 +13,8 @@ namespace Mdex {
         private Revisions revisions;
         private string last_saved = "";
         private int64 last_edit = 0;
+        // Set while load_text fills the buffer with text that is already on disk.
+        private bool loading = false;
         // A New Window document lives in the cache until its first manual snapshot asks where to keep it.
         private bool untitled = false;
 
@@ -23,6 +25,8 @@ namespace Mdex {
 
 Options:
   -h, --help      show this help
+  --comments-path FILE
+                  print where FILE's review comments are kept, then exit
 
 """;
 
@@ -41,6 +45,15 @@ Options:
 
             if (args.length > 1 && (args[1] == "--help" || args[1] == "-h")) {
                 cmdline.print ("%s", USAGE);
+                return 0;
+            }
+
+            if (args.length > 1 && args[1] == "--comments-path") {
+                if (args.length < 3) {
+                    cmdline.printerr ("mdex: --comments-path needs a FILE\n");
+                    return 1;
+                }
+                cmdline.print ("%s\n", Comments.path_for (GLib.File.new_for_commandline_arg (args[2]).get_path ()));
                 return 0;
             }
 
@@ -94,6 +107,12 @@ Options:
                         return;
                     }
                     window.show_toast (revisions.snapshot (text, "manual") ? "Snapshot taken" : "Nothing changed since the last snapshot");
+                });
+                window.reload_requested.connect ((text) => {
+                    // Autosave has put the editor's text on disk by now, so keep it restorable and write the reloaded text back.
+                    revisions.snapshot (window.get_text (), "before-reload");
+                    load_text (text);
+                    save_now (text);
                 });
                 window.export_done.connect ((text) => revisions.snapshot (text, "export"));
                 window.revisions_requested.connect ((text) => {
@@ -184,7 +203,7 @@ Options:
             string contents;
             try {
                 FileUtils.get_contents (scratch_file ().get_path (), out contents);
-                window.set_text (Editor.unwrap (contents));
+                load_text (Editor.unwrap (contents));
                 revisions.snapshot (window.get_text (), "original");
             } catch (GLib.FileError e) {
                 // No previous scratch session — start empty, nothing to recover.
@@ -192,17 +211,20 @@ Options:
         }
 
         /**
-         * Points the revision store at a document. A fresh scratch buffer
-         * wipes the old scratch history, since it is a different document
-         * living at the same path.
+         * Points the revision store and the comments at a document. A fresh
+         * scratch buffer wipes the old scratch history, since it is a different
+         * document living at the same path.
          */
         private void track (GLib.File? file, bool fresh) {
-            revisions = new Revisions (file != null ? file.get_path () : null);
+            string? path = file != null ? file.get_path () : null;
+            revisions = new Revisions (path);
             if (fresh) {
                 revisions.clear ();
+                new Comments (Comments.path_for (path)).clear ();
             }
             last_saved = window.get_text ();
             last_edit = 0;
+            window.set_document (path);
         }
 
         /** Drops the current document for an empty scratch buffer; autosave picks up scratch.md on the next edit. */
@@ -259,8 +281,29 @@ Options:
                 // rewriting an identical buffer would bounce saves between the two forever.
                 string text = Editor.unwrap ((string) contents);
                 bool same_file = current_file != null && file.equal (current_file);
-                if (!same_file || text != window.get_text ()) {
-                    window.set_text (text);
+                if (!same_file) {
+                    load_text (text);
+                } else {
+                    var change = DiskChange.decide (text, window.get_text (), last_saved, autosave_id != 0);
+                    switch (change) {
+                        case DiskChange.RELOAD:
+                            // The editor's text is on disk by now, and unless a snapshot already holds it, this reload would leave it in none.
+                            revisions.snapshot (window.get_text (), "before-reload");
+                            load_text (text);
+                            break;
+                        case DiskChange.ASK:
+                            // The pending autosave overwrites the file within a second, so keep the disk text where Revisions can restore it.
+                            revisions.snapshot (text, "external");
+                            window.offer_reload (text);
+                            break;
+                        default:
+                            break;
+                    }
+                    if (change != DiskChange.ASK) {
+                        // The disk and the editor agree again, so an earlier offer to reload is out of date.
+                        // Not before the etag check above: mdex's own autosave overwrites the offered text and must leave the banner up.
+                        window.editor.withdraw_reload_offer ();
+                    }
                 }
                 current_file = file;
                 current_etag = etag;
@@ -275,6 +318,25 @@ Options:
             } catch (GLib.Error e) {
                 warning ("failed to open %s: %s", file.get_path (), e.message);
             }
+        }
+
+        /**
+         * Replaces the buffer with text that is already on disk: a reload, a
+         * file just opened, or the restored scratch buffer. Loading is not an
+         * edit, so no autosave or "pause" snapshot follows and a pending
+         * autosave of the old text is dropped. No snapshot is taken either:
+         * the new text is recorded by the next "pause", whose last_saved is
+         * this text.
+         */
+        private void load_text (string text) {
+            if (autosave_id != 0) {
+                GLib.Source.remove (autosave_id);
+                autosave_id = 0;
+            }
+            loading = true;
+            window.set_text (text);
+            loading = false;
+            last_saved = text;
         }
 
         /**
@@ -361,6 +423,10 @@ Options:
                 window.show_toast ("Could not save file");
                 return;
             }
+            // The comments are keyed by path, so they follow the document; an existing sidecar at the destination is kept (see Comments.move_to).
+            if (dest.get_path () != null) {
+                new Comments (Comments.path_for (current_file.get_path ())).move_to (Comments.path_for (dest.get_path ()));
+            }
             untitled = false;
             yield open_file (dest);
             revisions.snapshot (text, "manual");
@@ -374,6 +440,9 @@ Options:
          * that is the one worth comparing against, not whatever is mid-keystroke.
          */
         private void schedule_autosave (string text) {
+            if (loading) {
+                return;
+            }
             int64 now = GLib.get_monotonic_time ();
             if (last_edit != 0 && now - last_edit > IDLE_SNAPSHOT_USEC) {
                 revisions.snapshot (last_saved, "pause");

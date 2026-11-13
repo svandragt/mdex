@@ -135,10 +135,35 @@ html, body {
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* github-markdown.css already colours mark per theme; this tells a comment's mark from an authored one. */
+.markdown-body mark.mdex-comment {
+  border-bottom: 2px solid var(--borderColor-attention-emphasis, #9a6700);
+  cursor: pointer;
+}
+
+#mdex-comment {
+  position: absolute;
+  z-index: 10;
+  padding: 2px 10px;
+  font: 13px/1.5 system-ui, sans-serif;
+  color: var(--fgColor-default, #1f2328);
+  background-color: var(--bgColor-muted, #f6f8fa);
+  border: 1px solid var(--borderColor-default, #d1d9e0);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px #1f232826;
+  cursor: pointer;
+}
+
+#mdex-comment:hover {
+  /* The hover tint is translucent, so it sits on the opaque background as a layer; alone it lets the text underneath show through. */
+  background-image: linear-gradient(var(--bgColor-neutral-muted, #818b981f), var(--bgColor-neutral-muted, #818b981f));
+}
 </style>
 </head>
 <body>
 <div id="output" class="markdown-body"></div>
+<button id="mdex-comment" type="button" hidden>Comment</button>
 
 <script>
 /*{{MARKED_JS}}*/
@@ -147,6 +172,7 @@ html, body {
 <script>
 (function () {
   const output = document.getElementById("output");
+  const commentButton = document.getElementById("mdex-comment");
   const exporters = [];
   const exportersById = {};
 
@@ -163,6 +189,160 @@ html, body {
       .replace(/&amp;/g, "&");
   }
 
+  function collapse(s) {
+    return s.replace(/\s+/g, " ").trim();
+  }
+
+  // The concatenation of texts with every run of whitespace as one space, and
+  // where each character came from: at[k] is { i, o }, an index into texts and
+  // an offset in that text.
+  function flatten(texts) {
+    const chars = [];
+    const at = [];
+    texts.forEach(function (t, i) {
+      for (let o = 0; o < t.length; o++) {
+        const c = /\s/.test(t[o]) ? " " : t[o];
+        if (c === " " && chars[chars.length - 1] === " ") continue;
+        chars.push(c);
+        at.push({ i: i, o: o });
+      }
+    });
+    return { text: chars.join(""), at: at, texts: texts };
+  }
+
+  // Where each match of needle starts in text, overlapping matches included.
+  function starts(text, needle) {
+    const found = [];
+    for (let m = text.indexOf(needle); m !== -1; m = text.indexOf(needle, m + 1)) found.push(m);
+    return found;
+  }
+
+  // Finds the nth (1-based, default 1) match of quote in flat, the flatten() of
+  // some texts, whitespace collapsed on both sides, and returns the pieces of
+  // those texts it covers as [{ i, start, end }] (i indexes the texts), or
+  // null. With fewer matches than n it takes the last, as an earlier copy may
+  // have been removed. A quote can span texts: bold, links.
+  function findQuote(flat, quote, n) {
+    const needle = collapse(quote);
+    if (!needle) return null;
+    const found = starts(flat.text, needle);
+    if (!found.length) return null;
+    const m = found[Math.max(1, Math.min(n || 1, found.length)) - 1];
+    const first = flat.at[m];
+    const last = flat.at[m + needle.length - 1];
+    const pieces = [];
+    for (let i = first.i; i <= last.i; i++) {
+      const start = i === first.i ? first.o : 0;
+      const end = i === last.i ? last.o + 1 : flat.texts[i].length;
+      if (start < end) pieces.push({ i: i, start: start, end: end });
+    }
+    return pieces;
+  }
+
+  // The page's text nodes in order, and each <br> among them: a hard line
+  // break is whitespace in the selection's text, so it is in the page's.
+  // shortcut: only <br>; marked puts a newline between its own blocks, so only
+  // raw HTML blocks written with nothing between them still join, add them if seen.
+  function textNodes() {
+    const walker = document.createTreeWalker(output, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    const nodes = [];
+    for (let node; (node = walker.nextNode());) if (node.nodeType === 3 || node.nodeName === "BR") nodes.push(node);
+    return nodes;
+  }
+
+  function textOf(node) {
+    return node.nodeType === 3 ? node.data : "\n";
+  }
+
+  // Returns the text node holding the wrapped text.
+  function wrap(node, start, end, id, title) {
+    const inner = node.splitText(start);
+    inner.splitText(end - start);
+    const mark = document.createElement("mark");
+    mark.className = "mdex-comment";
+    mark.dataset.id = id;
+    mark.title = title;
+    inner.parentNode.replaceChild(mark, inner);
+    mark.appendChild(inner);
+    return inner;
+  }
+
+  // Marks each stretch [{ start, end, item }] of one text node. The node is cut
+  // at every edge and the stretches wrapped from the right, so the offsets of
+  // those still to wrap stay valid; a part that several comments cover gets a
+  // mark from each, the first comment outermost.
+  function wrapStretches(node, stretches) {
+    const cuts = [...new Set(stretches.flatMap(function (g) { return [g.start, g.end]; }))].sort(function (a, b) { return a - b; });
+    for (let k = cuts.length - 2; k >= 0; k--) {
+      let target = node, start = cuts[k], end = cuts[k + 1];
+      stretches.filter(function (g) { return g.start <= start && end <= g.end; }).forEach(function (g) {
+        target = wrap(target, start, end, g.item.id, g.item.title);
+        start = 0;
+        end = target.data.length;
+      });
+    }
+  }
+
+  // The selected text inside the rendered output, whitespace collapsed, or "".
+  function selectedQuote() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return "";
+    const range = selection.getRangeAt(0);
+    return output.contains(range.commonAncestorContainer) ? collapse(selection.toString()) : "";
+  }
+
+  // Which match of quote (already collapsed) in the rendered text the range
+  // starts at, 1-based: the matches that start before it, plus one.
+  function occurrenceAt(range, quote) {
+    const nodes = textNodes();
+    const flat = flatten(nodes.map(textOf));
+    return starts(flat.text, quote).filter(function (m) {
+      return range.comparePoint(nodes[flat.at[m].i], flat.at[m].o) < 0;
+    }).length + 1;
+  }
+
+  function showCommentButton() {
+    const selection = window.getSelection();
+    if (!selectedQuote()) return;
+    const rects = selection.getRangeAt(0).getClientRects();
+    const r = rects[rects.length - 1] || selection.getRangeAt(0).getBoundingClientRect();
+    commentButton.style.top = window.scrollY + Math.min(r.bottom + 6, window.innerHeight - commentButton.offsetHeight - 8) + "px";
+    commentButton.style.left = window.scrollX + Math.max(8, Math.min(r.right, window.innerWidth - commentButton.offsetWidth - 8)) + "px";
+    commentButton.hidden = false;
+  }
+
+  // A page without the handler (tests, older build) ignores the message.
+  function post(message) {
+    window.webkit?.messageHandlers?.mdex?.postMessage(message);
+  }
+
+  function postComment() {
+    const quote = selectedQuote();
+    if (!quote) return false;
+    const occurrence = occurrenceAt(window.getSelection().getRangeAt(0), quote);
+    commentButton.hidden = true;
+    post({ type: "comment", quote: quote, occurrence: occurrence });
+    return true;
+  }
+
+  commentButton.addEventListener("mousedown", function (e) { e.preventDefault(); }); // keeps the selection
+  commentButton.addEventListener("click", postComment);
+  // A click that ends a text selection is for the Comment button, so only a click without one opens the comment.
+  output.addEventListener("click", function (e) {
+    const mark = e.target.closest("mark.mdex-comment");
+    if (mark && !selectedQuote()) post({ type: "open", id: mark.dataset.id });
+  });
+  // Deferred, so a click that clears the selection is seen as empty.
+  // A click on the button ends with a mouseup on it, before the click hides it; showing it again would let a second click post the comment twice.
+  document.addEventListener("mouseup", function (e) { if (!commentButton.contains(e.target)) setTimeout(showCommentButton); });
+  document.addEventListener("selectionchange", function () {
+    if (!selectedQuote()) commentButton.hidden = true;
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "c" || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, textarea, select")) return;
+    if (postComment()) e.preventDefault();
+  });
+
   window.mdex = {
     unescape: unescapeEntities,
 
@@ -172,29 +352,66 @@ html, body {
     },
 
     // Selects the nth (1-based) case-insensitive occurrence of text in the
-    // rendered output and scrolls it into view; past the last, the last.
+    // rendered output and scrolls it into view; past the last, the last. Found
+    // as markQuotes finds a quote, so the text may span marks, bold or links.
     // shortcut: counts rendered text only, so a source match inside markdown
     // syntax or a URL shifts the count; source positions from marked fix it.
     reveal(text, n) {
-      const needle = text.toLowerCase();
-      const walker = document.createTreeWalker(output, NodeFilter.SHOW_TEXT);
-      let hit = null;
-      search: for (let node; (node = walker.nextNode());) {
-        const hay = node.data.toLowerCase();
-        for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + 1)) {
-          hit = { node: node, i: i };
-          if (--n <= 0) break search;
-        }
-      }
-      if (!hit) return "";
+      const nodes = textNodes();
+      const pieces = findQuote(flatten(nodes.map(function (node) { return textOf(node).toLowerCase(); })), text.toLowerCase(), n);
+      if (!pieces) return "";
+      const first = pieces[0];
+      const last = pieces[pieces.length - 1];
       const range = document.createRange();
-      range.setStart(hit.node, hit.i);
-      range.setEnd(hit.node, hit.i + needle.length);
+      range.setStart(nodes[first.i], first.start);
+      range.setEnd(nodes[last.i], last.end);
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
       window.scrollBy(0, range.getBoundingClientRect().top - window.innerHeight * 0.3);
       return "";
+    },
+
+    // Takes [{ id, quote, occurrence, title }]. Wraps the occurrence-th
+    // (1-based, default 1; the last when there are fewer) occurrence of each
+    // quote (rendered text, whitespace collapsed) in <mark class="mdex-comment">,
+    // every piece carrying the id (clicking it posts { type: "open", id }) and
+    // the title (the tooltip), and returns one boolean per item: whether it was
+    // found. render() replaces the content, so call this after every render;
+    // it clears its earlier marks first.
+    markQuotes(items) {
+      output.querySelectorAll("mark.mdex-comment").forEach(function (m) { m.replaceWith(...m.childNodes); });
+      output.normalize();
+      // Marks split text nodes but never change the text, so every quote is
+      // located on the unmarked nodes first and wrapped afterwards.
+      const nodes = textNodes();
+      const flat = flatten(nodes.map(textOf));
+      const stretches = nodes.map(function () { return []; });
+      const found = (items || []).map(function (item) {
+        const pieces = findQuote(flat, item.quote, item.occurrence);
+        (pieces || []).forEach(function (p) {
+          if (nodes[p.i].nodeType === 3) stretches[p.i].push({ start: p.start, end: p.end, item: item });
+        });
+        return !!pieces;
+      });
+      stretches.forEach(function (list, i) { if (list.length) wrapStretches(nodes[i], list); });
+      return found;
+    },
+
+    // Scrolls the first piece of the occurrence-th occurrence of a quote
+    // (rendered text, whitespace collapsed; same rule as markQuotes) to the
+    // middle of the window, selects nothing, and returns whether it was found.
+    // Unlike reveal(), the quote may span bold, links or line breaks.
+    revealQuote(quote, occurrence) {
+      const nodes = textNodes();
+      const pieces = findQuote(flatten(nodes.map(textOf)), quote, occurrence);
+      if (!pieces) return false;
+      const range = document.createRange();
+      range.setStart(nodes[pieces[0].i], pieces[0].start);
+      range.setEnd(nodes[pieces[0].i], pieces[0].end);
+      const r = range.getBoundingClientRect();
+      window.scrollBy(0, r.top + r.height / 2 - window.innerHeight / 2);
+      return true;
     },
 
     list() {

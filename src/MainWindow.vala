@@ -10,8 +10,17 @@ namespace Mdex {
 
         private Gtk.MenuButton export_button;
         private Gtk.Label subtitle_label;
+        private Gtk.ToggleButton comments_button;
         private Gtk.Overlay overlay;
         private SimpleActionGroup export_actions;
+        private CommentsPane comments_pane;
+        private Comments? comments = null;
+        private GLib.FileMonitor? comments_monitor = null;
+        private Gtk.Popover comment_popover;
+        private Gtk.Label comment_quote;
+        private Gtk.Entry comment_entry;
+        private string comment_target = "";
+        private int comment_occurrence = 1;
 
         /** Fired once the preview has loaded shell.html and the bridge is live. */
         public signal void preview_ready ();
@@ -33,6 +42,8 @@ namespace Mdex {
         public signal void export_done (string text);
         /** Fired when the user opens the revisions window. */
         public signal void revisions_requested (string text);
+        /** Fired when the user takes the offer to replace unsaved edits with the text now on disk. */
+        public signal void reload_requested (string text);
 
         public MainWindow (Gtk.Application app) {
             Object (application: app);
@@ -108,6 +119,12 @@ namespace Mdex {
             publish_button.clicked.connect (confirm_publish);
             header.pack_end (publish_button);
 
+            comments_button = new Gtk.ToggleButton () {
+                icon_name = "mail-message-new-symbolic",
+                tooltip_text = "Comments",
+            };
+            header.pack_end (comments_button);
+
             set_titlebar (header);
 
             editor = new Editor ();
@@ -122,8 +139,17 @@ namespace Mdex {
                 shrink_end_child = false,
             };
 
+            paned.hexpand = true;
+            comments_pane = new CommentsPane () {
+                visible = false,
+            };
+            comments_button.bind_property ("active", comments_pane, "visible");
+            var body = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0);
+            body.append (paned);
+            body.append (comments_pane);
+
             overlay = new Gtk.Overlay () {
-                child = paned,
+                child = body,
             };
             set_child (overlay);
 
@@ -135,6 +161,22 @@ namespace Mdex {
                 text_changed (text);
             });
             editor.match_selected.connect ((text, n) => preview.reveal.begin (text, n));
+            editor.reload_requested.connect ((text) => reload_requested (text));
+
+            build_comment_popover ();
+            preview.comment_requested.connect (ask_comment);
+            preview.comment_opened.connect ((id) => {
+                // The button drives the pane's visibility, so flipping it keeps the two in step.
+                comments_button.active = true;
+                comments_pane.select (id);
+            });
+            // A render replaces the page content and with it the marks.
+            preview.rendered.connect (() => refresh_comments.begin ());
+            comments_pane.changed.connect (() => refresh_comments.begin ());
+            comments_pane.quote_activated.connect ((quote, occurrence) => {
+                // shortcut: no editor selection, the stored quote is rendered text with no source position; map it back if wanted.
+                preview.reveal_quote.begin (quote, occurrence);
+            });
 
             export_actions = new SimpleActionGroup ();
             insert_action_group ("export", export_actions);
@@ -208,6 +250,133 @@ namespace Mdex {
             var toast = new Granite.Toast (title);
             overlay.add_overlay (toast);
             toast.send_notification ();
+        }
+
+        /** Tells the user the file changed under unsaved edits; Reload fires reload_requested with the disk text. */
+        public void offer_reload (string text) {
+            editor.offer_reload (text);
+        }
+
+        /** Points the comments at a document's sidecar; null is the scratch buffer. */
+        public void set_document (string? path) {
+            editor.withdraw_reload_offer ();
+            string file = Comments.path_for (path);
+            comments = new Comments (file);
+            comments_pane.use (file);
+
+            if (comments_monitor != null) {
+                comments_monitor.cancel ();
+            }
+            // The sidecar may not exist yet; watching its directory is how its creation is noticed.
+            DirUtils.create_with_parents (Path.get_dirname (file), 0700);
+            try {
+                comments_monitor = GLib.File.new_for_path (file).monitor_file (GLib.FileMonitorFlags.NONE, null);
+                comments_monitor.changed.connect ((f, other, event) => {
+                    if (event == GLib.FileMonitorEvent.CHANGES_DONE_HINT
+                        || event == GLib.FileMonitorEvent.CREATED
+                        || event == GLib.FileMonitorEvent.DELETED) {
+                        refresh_comments.begin ();
+                    }
+                });
+            } catch (GLib.Error e) {
+                warning ("cannot watch %s: %s", file, e.message);
+            }
+            refresh_comments.begin ();
+        }
+
+        /** Marks the open comments' quotes in the preview, then shows the list with the ones not found flagged. */
+        private async void refresh_comments () {
+            // One read of the sidecar serves the marks and the pane; null is a file that cannot be read.
+            Gee.List<Comment>? all = comments != null ? comments.list () : new Gee.ArrayList<Comment> ();
+            Comment[] open = {};
+            if (all != null) {
+                foreach (var c in all) {
+                    if (c.status == "open") {
+                        open += c;
+                    }
+                }
+            }
+            bool[] found = yield preview.mark_quotes (open);
+            // No flags until the page has loaded; the first render marks again.
+            Gee.Set<string>? lost = null;
+            if (found.length == open.length) {
+                lost = new Gee.HashSet<string> ();
+                for (int i = 0; i < open.length; i++) {
+                    if (!found[i]) {
+                        lost.add (open[i].effective_quote ());
+                    }
+                }
+            }
+            comments_pane.show_comments (all, lost);
+        }
+
+        private void build_comment_popover () {
+            comment_quote = new Gtk.Label ("") {
+                xalign = 0,
+                wrap = true,
+                lines = 2,
+                ellipsize = Pango.EllipsizeMode.END,
+                max_width_chars = 40,
+                css_classes = { "dim-label" },
+            };
+            comment_entry = new Gtk.Entry () {
+                placeholder_text = "Comment",
+                width_chars = 40,
+            };
+            comment_entry.activate.connect (save_comment);
+            var box = new Gtk.Box (Gtk.Orientation.VERTICAL, 6) {
+                margin_top = 8,
+                margin_bottom = 8,
+                margin_start = 8,
+                margin_end = 8,
+            };
+            box.append (comment_quote);
+            box.append (comment_entry);
+            comment_popover = new Gtk.Popover () {
+                child = box,
+                position = Gtk.PositionType.BOTTOM,
+            };
+            comment_popover.set_parent (preview);
+        }
+
+        /** The page sends only the selected text, not where it is, so the popover hangs from the top middle of the preview. */
+        private void ask_comment (string quote, int occurrence) {
+            comment_target = quote;
+            comment_occurrence = occurrence;
+            comment_quote.label = quote;
+            comment_entry.text = "";
+            comment_popover.pointing_to = Gdk.Rectangle () {
+                x = preview.get_width () / 2,
+                y = 24,
+                width = 1,
+                height = 1,
+            };
+            comment_popover.popup ();
+            comment_entry.grab_focus ();
+        }
+
+        private void save_comment () {
+            string body = comment_entry.text;
+            comment_popover.popdown ();
+            // Counts comments of every status: a document whose comments are all closed already knows the pane.
+            bool first = comments != null && comments.load ().is_empty;
+            if (comments != null && comments.add (comment_target, body, comment_occurrence) != null) {
+                if (first) {
+                    comments_button.active = true;
+                }
+                refresh_comments.begin ();
+                return;
+            }
+            show_toast (body.strip () == ""
+                ? "Comment not saved: it has no text"
+                : "Comment not saved: the comments file cannot be read or written");
+        }
+
+        public override void dispose () {
+            if (comment_popover != null && comment_popover.get_parent () != null) {
+                comment_popover.unparent ();
+            }
+            base.dispose ();
         }
 
         private bool is_dark () {

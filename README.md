@@ -55,11 +55,23 @@ Each snapshot is labelled with when and why it was taken:
 | --- | --- |
 | Original | when a document is opened or piped in |
 | export, publish | when you export or publish, because that version went out |
+| external | when the file changes on disk while you have unsaved edits, because autosave then replaces that text |
+| before reload | when a change on disk replaces the text in the editor, whether you pressed Reload or mdex reloaded by itself, so the text you had can be restored; skipped when a snapshot already holds it |
 | pause | on the first edit after five minutes away, keeping the version that sat still |
 | manual | when you press Ctrl+S |
 | before restore | when you restore an older snapshot |
 
 Snapshots live in `~/.cache/mdex/revisions/`, one directory per document; starting a new scratch buffer clears the old scratch history.
+
+## Comments
+
+To comment on a passage, select it in the preview and press C, or click the Comment button that appears by the selection. Type your comment and press Enter. The first comment on a document also opens the Comments pane. The passage is underlined in the preview. A comment on text that appears more than once stays on the occurrence you selected. Hover over it to read the comment and any reply, or click it to open the Comments pane at that comment.
+
+The Comments button in the header bar opens a pane on the right. It lists open comments first, each with Resolve and Dismiss, and Edit until someone has replied. Resolved and dismissed comments wait in a collapsed list below. Click a comment to scroll the preview to its passage. A comment whose passage is no longer in the document says "Text changed".
+
+A coding session that edits the same file can answer your comments. Its reply appears under the comment, and mdex reloads the document. If you have unsaved edits, a banner above the editor offers Reload or Keep mine and stays until you pick one. If the session rewrote the passage, the underline and the scroll follow it to the new text. When you have unsaved edits, mdex keeps the text now on disk as an "external" snapshot, so Restore in the revisions window brings it back after autosave has replaced it.
+
+Comments are kept outside the document, in `~/.cache/mdex/comments/`, so they never end up in the file, its exports or its git diff. `mdex --comments-path notes.md` prints where the comments for `notes.md` live, for a session to find.
 
 ## Publish to your blog
 
