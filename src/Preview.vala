@@ -39,11 +39,17 @@ namespace Mdex {
                     return false;
                 }
                 var action = ((WebKit.NavigationPolicyDecision) decision).get_navigation_action ();
-                if (action.get_navigation_type () != WebKit.NavigationType.LINK_CLICKED) {
+                string uri = action.get_request ().get_uri ();
+                // load_html reports as an OTHER navigation to about:blank. Anything else not clicked, such as a
+                // document's meta refresh, would replace the shell with a page that has no policy.
+                if (type == WebKit.PolicyDecisionType.NAVIGATION_ACTION
+                    && action.get_navigation_type () == WebKit.NavigationType.OTHER && uri == "about:blank") {
                     return false;
                 }
                 decision.ignore ();
-                string uri = action.get_request ().get_uri ();
+                if (action.get_navigation_type () != WebKit.NavigationType.LINK_CLICKED || !is_openable (uri)) {
+                    return true;
+                }
                 try {
                     AppInfo.launch_default_for_uri (uri, null);
                 } catch (GLib.Error e) {
@@ -51,6 +57,12 @@ namespace Mdex {
                 }
                 return true;
             });
+        }
+
+        /** Whether a clicked link may be handed to the system. Anything else, such as javascript: or file:, is dropped. */
+        public static bool is_openable (string uri) {
+            string? scheme = GLib.Uri.peek_scheme (uri);
+            return scheme == "http" || scheme == "https" || scheme == "mailto";
         }
 
         /** The page can post anything, so a message that is not a comment on a non-empty quote or an open of a non-empty id is dropped. */
@@ -91,7 +103,9 @@ namespace Mdex {
                 resource_string ("/com/github/svandragt/mdex/web/exporters/github.js") + "\n" +
                 resource_string ("/com/github/svandragt/mdex/web/exporters/slack.js") + "\n" +
                 resource_string ("/com/github/svandragt/mdex/web/exporters/adf.js");
-            string shell = resource_string ("/com/github/svandragt/mdex/web/shell.html");
+            // The nonce goes in before the bundles, so a {{NONCE}} inside one stays literal. A new one per load.
+            string shell = resource_string ("/com/github/svandragt/mdex/web/shell.html")
+                .replace ("{{NONCE}}", GLib.Uuid.string_random ().replace ("-", ""));
 
             string html = shell
                 .replace ("/*{{MARKED_JS}}*/", marked)

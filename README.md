@@ -35,6 +35,8 @@ A file opened from the command line, or brought forward by a second launch, star
 
 With no input, mdex reopens the document you had last time, or a scratch buffer if there wasn't one. Everything autosaves a second after you stop typing — to the file you opened, or to `~/.cache/mdex/scratch.md` when there isn't one, so an unnamed session survives a restart. Every launch is a separate instance, so run `mdex` twice to work on two documents side by side. A document that is already open in a window opens only there: opening it again from the command line, Ctrl+O or New file brings that window to the front.
 
+The preview shows what a document says but does not run it: scripts and styles inside a Markdown file are ignored. A link opens in your browser or mail program only when it starts with `http:`, `https:` or `mailto:`.
+
 Export from the header bar menu, or with a shortcut:
 
 | Format | Shortcut | Goes to |

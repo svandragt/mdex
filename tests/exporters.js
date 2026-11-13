@@ -9,8 +9,8 @@ const vm = require("vm");
 const web = path.join(__dirname, "..", "data", "web");
 const read = (p) => fs.readFileSync(path.join(web, p), "utf8");
 
-const bridge = read("shell.html").match(/<script>\s*\(function \(\) \{[\s\S]*?<\/script>/)[0]
-  .replace(/^<script>|<\/script>$/g, "");
+const bridge = read("shell.html").match(/<script[^>]*>\s*\(function \(\) \{[\s\S]*?<\/script>/)[0]
+  .replace(/^<script[^>]*>|<\/script>$/g, "");
 
 // A minimal DOM, just enough for markQuotes: text nodes (no tagName) and
 // elements, with the node methods the bridge calls.

@@ -64,6 +64,25 @@ commentspane_test = executable(
 
 test('commentspane', commentspane_test)
 
+# The link allow-list is a static string function on Preview, so no widget is built and no display is needed.
+previewlink_test = executable(
+  'test-previewlink',
+  files('previewlink.vala') + preview_source + comments_source,
+  dependencies: dependencies,
+)
+
+test('previewlink', previewlink_test)
+
+# Builds a Preview and loads the shell from the gresource, so it needs a display; the test skips (exit 77) without one.
+previewcsp_test = executable(
+  'test-previewcsp',
+  files('previewcsp.vala') + preview_source + comments_source,
+  mdex_resources,
+  dependencies: dependencies,
+)
+
+test('previewcsp', previewcsp_test)
+
 # The exporters are JavaScript, so this one runs under node when there is one.
 node = find_program('node', required: false)
 if node.found()

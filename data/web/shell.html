@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-{{NONCE}}'; style-src 'nonce-{{NONCE}}'; img-src * data: file:; form-action 'none'; base-uri 'none'">
 <meta charset="utf-8">
-<style>
+<style nonce="{{NONCE}}">
 :root { color-scheme: light dark; }
 
 /*
@@ -165,11 +166,11 @@ html, body {
 <div id="output" class="markdown-body"></div>
 <button id="mdex-comment" type="button" hidden>Comment</button>
 
-<script>
+<script nonce="{{NONCE}}">
 /*{{MARKED_JS}}*/
 </script>
 
-<script>
+<script nonce="{{NONCE}}">
 (function () {
   const output = document.getElementById("output");
   const commentButton = document.getElementById("mdex-comment");
@@ -452,7 +453,7 @@ html, body {
 })();
 </script>
 
-<script>
+<script nonce="{{NONCE}}">
 /*{{EXPORTERS_JS}}*/
 </script>
 </body>
