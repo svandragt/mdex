@@ -39,14 +39,13 @@ namespace Mdex {
                     return false;
                 }
                 var action = ((WebKit.NavigationPolicyDecision) decision).get_navigation_action ();
-                string uri = action.get_request ().get_uri ();
-                // load_html reports as an OTHER navigation to about:blank. Anything else not clicked, such as a
-                // document's meta refresh, would replace the shell with a page that has no policy.
-                if (type == WebKit.PolicyDecisionType.NAVIGATION_ACTION
-                    && action.get_navigation_type () == WebKit.NavigationType.OTHER && uri == "about:blank") {
+                // Only load_shell's own load may navigate without a click. After it, a navigation such as a
+                // document's meta refresh would replace the shell with a page that has no policy.
+                if (!loaded) {
                     return false;
                 }
                 decision.ignore ();
+                string uri = action.get_request ().get_uri ();
                 if (action.get_navigation_type () != WebKit.NavigationType.LINK_CLICKED || !is_openable (uri)) {
                     return true;
                 }
@@ -62,7 +61,27 @@ namespace Mdex {
         /** Whether a clicked link may be handed to the system. Anything else, such as javascript: or file:, is dropped. */
         public static bool is_openable (string uri) {
             string? scheme = GLib.Uri.peek_scheme (uri);
-            return scheme == "http" || scheme == "https" || scheme == "mailto";
+            return scheme == "http" || scheme == "https" || (scheme == "mailto" && !names_attachment (uri));
+        }
+
+        /** A mail client attaches the local file that an attach or attachment key in the mailto: query names. Fails closed on a URI it cannot parse. */
+        private static bool names_attachment (string uri) {
+            try {
+                // The query stays encoded, so a %26 inside a value is not read as a separator and a %61ttach key is decoded once, by parse_params.
+                string? query = GLib.Uri.parse (uri, GLib.UriFlags.ENCODED_QUERY | GLib.UriFlags.PARSE_RELAXED).get_query ();
+                if (query == null) {
+                    return false;
+                }
+                foreach (string key in GLib.Uri.parse_params (query, -1, "&;", GLib.UriParamsFlags.NONE).get_keys ()) {
+                    string name = key.down ();
+                    if (name == "attach" || name == "attachment") {
+                        return true;
+                    }
+                }
+                return false;
+            } catch (GLib.Error e) {
+                return true;
+            }
         }
 
         /** The page can post anything, so a message that is not a comment on a non-empty quote or an open of a non-empty id is dropped. */

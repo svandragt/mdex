@@ -58,17 +58,29 @@ private async void check_page (Mdex.Preview preview) {
     check ("a <br> in a table cell still renders", (yield ask (preview, "return String(document.querySelector('td br') !== null);")) == "true");
 
     yield ask (preview, "getSelection().selectAllChildren(document.getElementById('output')); document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })); return '';");
-    yield wait_ms (200);
-    check ("the Comment button is shown and placed by script", (yield ask (preview,
-        "const b = document.getElementById('mdex-comment'); return String(!b.hidden && b.style.top !== '' && b.style.left !== '');")) == "true");
+    // The page shows the button from a timeout after the mouseup, so poll for it as for the image.
+    for (int i = 0; i < 100 && (yield ask (preview, BUTTON_PLACED)) != "true"; i++) {
+        yield wait_ms (50);
+    }
+    check ("the Comment button is shown and placed by script", (yield ask (preview, BUTTON_PLACED)) == "true");
 
-    // A meta refresh navigates without a click and would replace the shell with a page that has no policy. It goes last, because without the fix it ends the page. Needs no network: it targets about:blank?x.
-    yield preview.render ("<meta http-equiv=\"refresh\" content=\"0;url=about:blank?x\">");
+    // A meta refresh navigates without a click and would replace the shell with a page that has no policy.
+    // These go last, because without the fix a refresh ends the page. Neither needs the network.
+    yield check_meta_refresh (preview, shell_uri, "about:blank?x");
+    yield check_meta_refresh (preview, shell_uri, "about:blank");
+}
+
+private const string BUTTON_PLACED =
+    "const b = document.getElementById('mdex-comment'); return String(!b.hidden && b.style.top !== '' && b.style.left !== '');";
+
+/** Renders a meta refresh to target. The wait is fixed because nothing is expected to happen. */
+private async void check_meta_refresh (Mdex.Preview preview, string shell_uri, string target) {
+    yield preview.render ("<meta http-equiv=\"refresh\" content=\"0;url=%s\">".printf (target));
     yield wait_ms (1500);
-    check ("a meta refresh does not leave the shell", preview.get_uri () == shell_uri);
-    check ("the page still has its bridge after a meta refresh", (yield ask (preview, "return typeof window.mdex;")) == "object");
+    check ("a meta refresh to %s does not leave the shell".printf (target), preview.get_uri () == shell_uri);
+    check ("the page still has its bridge after a meta refresh to %s".printf (target), (yield ask (preview, "return typeof window.mdex;")) == "object");
     yield preview.render ("# after");
-    check ("a render after a meta refresh still works", (yield ask (preview, "return document.querySelector('h1')?.textContent ?? 'none';")) == "after");
+    check ("a render after a meta refresh to %s still works".printf (target), (yield ask (preview, "return document.querySelector('h1')?.textContent ?? 'none';")) == "after");
 }
 
 public static int main (string[] args) {
