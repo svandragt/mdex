@@ -35,7 +35,7 @@ A file opened from the command line, or brought forward by a second launch, star
 
 With no input, mdex reopens the document you had last time, or a scratch buffer if there wasn't one. Everything autosaves a second after you stop typing — to the file you opened, or to `~/.cache/mdex/scratch.md` when there isn't one, so an unnamed session survives a restart. Every launch is a separate instance, so run `mdex` twice to work on two documents side by side. A document that is already open in a window opens only there: opening it again from the command line, Ctrl+O or New file brings that window to the front.
 
-The preview shows what a document says but does not run it: scripts and styles inside a Markdown file are ignored, and audio, video and embedded frames do not load. A link opens in your browser or mail program only when it starts with `http:`, `https:` or `mailto:`, and a `mailto:` link that names an attachment does not open.
+The preview shows what a document says but does not run it: scripts and styles inside a Markdown file are ignored, and audio, video and embedded frames do not load. A link opens in your browser or mail program only when it starts with `http:`, `https:` or `mailto:`.
 
 Export from the header bar menu, or with a shortcut:
 
@@ -122,7 +122,7 @@ window.mdex.registerExporter('upper', 'Upper case', (tokens, raw) => {
 
 `examples/plaintext.js` is a working one: copy it to `~/.config/mdex/plugins/`, restart mdex, and "Plain text" appears in the Export menu alongside the built-in formats. The three built-in exporters register through the same call, so a plugin can do anything they can — including replacing one of them by reusing its id.
 
-A plugin runs in the preview page, under the page's security policy, which blocks `fetch`, `eval`, `new Function` and added `<style>` elements. An exporter returns a string, so do any sending outside mdex.
+A plugin runs in the preview page, where the page's security policy makes `fetch`, `eval` and `new Function` fail. The policy does not contain a plugin, so install only plugins you trust.
 
 ## How it works
 

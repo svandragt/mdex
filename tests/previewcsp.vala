@@ -68,6 +68,40 @@ private async void check_page (Mdex.Preview preview) {
     // These go last, because without the fix a refresh ends the page. Neither needs the network.
     yield check_meta_refresh (preview, shell_uri, "about:blank?x");
     yield check_meta_refresh (preview, shell_uri, "about:blank");
+
+    // A second load_shell navigates the view by itself, which the navigation guard must allow.
+    yield ask (preview, "window.beforeReload = 1; return '';");
+    check ("a second load_shell finishes", yield reload_shell (preview));
+    check ("the second load replaced the page", (yield ask (preview, "return typeof window.beforeReload;")) == "undefined");
+    yield preview.render ("# again");
+    check ("a render after the second load works", (yield ask (preview, "return document.querySelector('h1')?.textContent ?? 'none';")) == "again");
+}
+
+/** Loads the shell again, as a reload would. Gives up after 5 s, so a load the guard refuses fails the test instead of hanging it. */
+private async bool reload_shell (Mdex.Preview preview) {
+    bool done = false;
+    bool waiting = true;
+    preview.load_shell.begin ((obj, res) => {
+        try {
+            preview.load_shell.end (res);
+            done = true;
+        } catch (GLib.Error e) {
+            print ("load_shell failed: %s\n", e.message);
+        }
+        if (waiting) {
+            waiting = false;
+            reload_shell.callback ();
+        }
+    });
+    GLib.Timeout.add_seconds (5, () => {
+        if (waiting) {
+            waiting = false;
+            reload_shell.callback ();
+        }
+        return GLib.Source.REMOVE;
+    });
+    yield;
+    return done;
 }
 
 private const string BUTTON_PLACED =

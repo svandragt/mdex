@@ -61,27 +61,35 @@ namespace Mdex {
         /** Whether a clicked link may be handed to the system. Anything else, such as javascript: or file:, is dropped. */
         public static bool is_openable (string uri) {
             string? scheme = GLib.Uri.peek_scheme (uri);
-            return scheme == "http" || scheme == "https" || (scheme == "mailto" && !names_attachment (uri));
+            return scheme == "http" || scheme == "https" || (scheme == "mailto" && mailto_keys_allowed (uri));
         }
 
-        /** A mail client attaches the local file that an attach or attachment key in the mailto: query names. Fails closed on a URI it cannot parse. */
-        private static bool names_attachment (string uri) {
-            try {
-                // The query stays encoded, so a %26 inside a value is not read as a separator and a %61ttach key is decoded once, by parse_params.
-                string? query = GLib.Uri.parse (uri, GLib.UriFlags.ENCODED_QUERY | GLib.UriFlags.PARSE_RELAXED).get_query ();
-                if (query == null) {
-                    return false;
-                }
-                foreach (string key in GLib.Uri.parse_params (query, -1, "&;", GLib.UriParamsFlags.NONE).get_keys ()) {
-                    string name = key.down ();
-                    if (name == "attach" || name == "attachment") {
-                        return true;
-                    }
-                }
-                return false;
-            } catch (GLib.Error e) {
+        /**
+         * A mail client attaches the local file that some keys in the mailto: query name, such as attach or insert, so
+         * only the keys of a plain message pass. The query is split by hand, on & only, because a strict parser refuses
+         * ordinary links such as ?subject=50% off. Values are not inspected.
+         */
+        private static bool mailto_keys_allowed (string uri) {
+            int start = uri.index_of_char ('?');
+            if (start < 0) {
                 return true;
             }
+            string query = uri.substring (start + 1);
+            int fragment = query.index_of_char ('#');
+            if (fragment >= 0) {
+                query = query.substring (0, fragment);
+            }
+            foreach (string segment in query.split ("&")) {
+                if (segment == "") {
+                    continue;
+                }
+                int equals = segment.index_of_char ('=');
+                string? key = GLib.Uri.unescape_string (equals < 0 ? segment : segment.substring (0, equals));
+                if (key == null || !strv_contains ({ "to", "cc", "bcc", "subject", "body" }, key.down ())) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /** The page can post anything, so a message that is not a comment on a non-empty quote or an open of a non-empty id is dropped. */
@@ -116,6 +124,8 @@ namespace Mdex {
 
         /** Assembles shell.html from the gresource bundle and loads it once. */
         public async void load_shell () throws GLib.Error {
+            // A second call is a reload: its own navigation must pass the guard, and renders wait until it ends.
+            loaded = false;
             string marked = resource_string ("/com/github/svandragt/mdex/web/marked.min.js");
             string css = resource_string ("/com/github/svandragt/mdex/web/github-markdown.css");
             string exporters =
