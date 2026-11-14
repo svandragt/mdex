@@ -74,12 +74,7 @@ namespace Mdex {
             if (start < 0) {
                 return true;
             }
-            string query = uri.substring (start + 1);
-            int fragment = query.index_of_char ('#');
-            if (fragment >= 0) {
-                query = query.substring (0, fragment);
-            }
-            foreach (string segment in query.split ("&")) {
+            foreach (string segment in uri.substring (start + 1).split ("&")) {
                 if (segment == "") {
                     continue;
                 }
@@ -122,10 +117,11 @@ namespace Mdex {
             return node != null && node.get_value_type () == typeof (string) ? node.get_string () : null;
         }
 
-        /** Assembles shell.html from the gresource bundle and loads it once. */
+        /** Assembles shell.html from the gresource bundle and loads it once. A call after the shell has loaded does nothing. */
         public async void load_shell () throws GLib.Error {
-            // A second call is a reload: its own navigation must pass the guard, and renders wait until it ends.
-            loaded = false;
+            if (loaded) {
+                return;
+            }
             string marked = resource_string ("/com/github/svandragt/mdex/web/marked.min.js");
             string css = resource_string ("/com/github/svandragt/mdex/web/github-markdown.css");
             string exporters =

@@ -31,6 +31,9 @@ public static int main (string[] args) {
     check ("mailto:a@b?%73ubject=x", true);
     // The ; is part of the subject, so the only key is subject.
     check ("mailto:a@b?subject=x;attach=/x", true);
+    // So is the #y, and a # with no query holds no key.
+    check ("mailto:a@b?subject=x#y", true);
+    check ("mailto:a@b#frag", true);
 
     // Mail clients attach the file that some keys name, so only the keys of a plain message are allowed.
     check ("mailto:a@b?attach=/etc/passwd", false);
@@ -40,6 +43,8 @@ public static int main (string[] args) {
     check ("mailto:a@b?insert=/x", false);
     check ("mailto:a@b?subject=x&insert=/x", false);
     check ("mailto:a@b?%20attach=/x", false);
+    check ("mailto:a@b?subject=x#&attach=/etc/passwd", false);
+    check ("mailto:a@b?subject=x#y&attach=/x", false);
 
     check ("javascript:alert(1)", false);
     check ("file:///etc/passwd", false);
