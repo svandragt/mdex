@@ -80,7 +80,7 @@ namespace Mdex {
                 }
                 int equals = segment.index_of_char ('=');
                 string? key = GLib.Uri.unescape_string (equals < 0 ? segment : segment.substring (0, equals));
-                if (key == null || !strv_contains ({ "to", "cc", "bcc", "subject", "body" }, key.down ())) {
+                if (key == null || !strv_contains ({ "to", "cc", "bcc", "subject", "body" }, key.ascii_down ())) {
                     return false;
                 }
             }

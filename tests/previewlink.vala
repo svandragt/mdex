@@ -45,6 +45,8 @@ public static int main (string[] args) {
     check ("mailto:a@b?%20attach=/x", false);
     check ("mailto:a@b?subject=x#&attach=/etc/passwd", false);
     check ("mailto:a@b?subject=x#y&attach=/x", false);
+    // %F0 decodes to a key that is not valid UTF-8.
+    check ("mailto:a@b?%F0=x", false);
 
     check ("javascript:alert(1)", false);
     check ("file:///etc/passwd", false);
