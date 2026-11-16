@@ -241,6 +241,70 @@ namespace Mdex {
             return found;
         }
 
+        /**
+         * Shows what the plan covers of the ticket in the page, and returns the Coverage.missing_key of each quote
+         * the page does not hold. A null plan clears the marks. Null until the page has loaded, or if the call fails.
+         */
+        public async Gee.Set<string>? mark_coverage (Coverage? plan) {
+            if (!loaded) {
+                return null;
+            }
+            var list = new Json.Builder ();
+            if (plan == null) {
+                list.add_null_value ();
+            } else {
+                list.begin_object ();
+                list.set_member_name ("covered");
+                list.begin_array ();
+                foreach (var c in plan.criteria) {
+                    foreach (var q in c.quotes) {
+                        list.begin_object ();
+                        list.set_member_name ("n");
+                        list.add_int_value (c.number);
+                        list.set_member_name ("quote");
+                        list.add_string_value (q.text);
+                        list.set_member_name ("title");
+                        list.add_string_value (c.text);
+                        list.end_object ();
+                    }
+                }
+                list.end_array ();
+                list.set_member_name ("gaps");
+                list.begin_array ();
+                foreach (var g in plan.gaps) {
+                    if (g.quote == null) {
+                        continue;
+                    }
+                    list.begin_object ();
+                    list.set_member_name ("quote");
+                    list.add_string_value (g.quote.text);
+                    list.set_member_name ("reason");
+                    list.add_string_value (g.reason);
+                    list.end_object ();
+                }
+                list.end_array ();
+                list.end_object ();
+            }
+            var b = new GLib.VariantBuilder (new GLib.VariantType ("a{sv}"));
+            b.add ("{sv}", "plan", new GLib.Variant.string (Json.to_string (list.get_root (), false)));
+            Gee.Set<string>? missing = null;
+            try {
+                var result = yield call_async_javascript_function (
+                    "return JSON.stringify(window.mdex.markCoverage(JSON.parse(plan)));", -1, b.end (), null, null, null);
+                var parser = new Json.Parser ();
+                parser.load_from_data (result.to_string ());
+                missing = new Gee.HashSet<string> ();
+                foreach (unowned Json.Node item in parser.get_root ().get_object ().get_array_member ("missing").get_elements ()) {
+                    var entry = item.get_object ();
+                    missing.add (Coverage.missing_key ((int) entry.get_int_member ("n"), entry.get_string_member ("quote")));
+                }
+            } catch (GLib.Error e) {
+                warning ("mark_coverage failed: %s", e.message);
+                missing = null;
+            }
+            return missing;
+        }
+
         /** Scrolls the page to the first piece of the nth (1-based) occurrence of quote, which may span bold, links or line breaks. Returns whether it was found. */
         public async bool reveal_quote (string quote, int n) {
             bool found = false;

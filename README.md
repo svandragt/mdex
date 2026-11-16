@@ -75,6 +75,35 @@ A coding session that edits the same file can answer your comments. Its reply ap
 
 Comments are kept outside the document, in `~/.cache/mdex/comments/`, so they never end up in the file, its exports or its git diff. `mdex --comments-path notes.md` prints where the comments for `notes.md` live, for a session to find.
 
+## Ticket coverage
+
+Open a ticket file whose name ends in `.ticket.md`, such as `391.ticket.md`, with its plan next to it under the same name without `.ticket` (`391.md`), and mdex shows which parts of the ticket the plan covers. A ticket with no plan beside it looks like any other document.
+
+The plan's `## Criteria` section drives it. Each numbered criterion quotes the ticket text it comes from in a `<q>` element that names the ticket file, and a line that starts with `Not covered:` quotes text the plan leaves out on purpose. Text in ordinary double quotes is not a quote, so a criterion can still mention an error message:
+
+```
+## Criteria
+1. `viv show --all` lists every version — <q cite="391.ticket.md">lists the available versions</q>
+
+Not covered: <q cite="391.ticket.md">a greeting</q> — it asks for nothing.
+```
+
+In the ticket's preview:
+
+- Quoted text gets a blue highlight and a badge with the criterion's number. Hover over it to read the criterion.
+- Text under `Not covered:` gets a grey highlight. Hover over it to read the reason.
+- A paragraph or list item in the ticket's description that has neither gets a bar in the left margin, so a gap you did not choose stands out. The title, the table above the description and the comments are not checked.
+- Comment underlines still show on covered text.
+
+The Criteria button in the header bar, which appears only for a ticket with a plan and opens by itself the first time, shows a pane with the criteria:
+
+- Each criterion shows its number and text, and says "Quotes the ticket", "Added" when it has no quote, or "Quote not found in 391.ticket.md" with the missing quote, because a quote may be misquoted.
+- The Not covered lines follow, each with its reason.
+- Click a criterion or a Not covered line to scroll the preview to its first highlight.
+- Open plan opens the plan in a new window and leaves the ticket as it is. If a window already shows the plan, that window comes to the front instead.
+
+Edit the plan and the ticket window updates.
+
 ## Publish to your blog
 
 The send button in the header bar publishes the document to your Micropub endpoint through [mp](https://github.com/mjdescy/mp), so mdex never handles your endpoint or token. The button appears once mp is on your PATH. Install and configure it once:

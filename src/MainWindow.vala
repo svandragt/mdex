@@ -16,6 +16,13 @@ namespace Mdex {
         private CommentsPane comments_pane;
         private Comments? comments = null;
         private GLib.FileMonitor? comments_monitor = null;
+        private Gtk.ToggleButton criteria_button;
+        private CoveragePane criteria_pane;
+        private string? plan_path = null;
+        private string ticket_name = "";
+        private GLib.FileMonitor? plan_monitor = null;
+        // The pane opens by itself the first time a window shows a ticket with a plan, and after that only on the button.
+        private bool criteria_opened = false;
         private Gtk.Popover comment_popover;
         private Gtk.Label comment_quote;
         private Gtk.Entry comment_entry;
@@ -26,6 +33,8 @@ namespace Mdex {
         public signal void preview_ready ();
         /** Fired when the user picks a file to open via the header button. */
         public signal void open_requested (GLib.File file);
+        /** Fired when the user wants a file in a window of its own; this window keeps its document. */
+        public signal void open_in_new_window_requested (GLib.File file);
         /** Fired when the user picks a location for a new file; it does not exist yet. */
         public signal void new_requested (GLib.File file);
         /** Fired when the user picks where to write a copy of the current text; the window keeps its document. */
@@ -125,6 +134,14 @@ namespace Mdex {
             };
             header.pack_end (comments_button);
 
+            // Shown only while the open document is a ticket with a plan beside it.
+            criteria_button = new Gtk.ToggleButton () {
+                icon_name = "view-list-ordered-symbolic",
+                tooltip_text = "Criteria",
+                visible = false,
+            };
+            header.pack_end (criteria_button);
+
             set_titlebar (header);
 
             editor = new Editor ();
@@ -145,7 +162,12 @@ namespace Mdex {
             };
             comments_button.bind_property ("active", comments_pane, "visible");
             var body = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 0);
+            criteria_pane = new CoveragePane () {
+                visible = false,
+            };
+            criteria_button.bind_property ("active", criteria_pane, "visible");
             body.append (paned);
+            body.append (criteria_pane);
             body.append (comments_pane);
 
             overlay = new Gtk.Overlay () {
@@ -171,8 +193,14 @@ namespace Mdex {
                 comments_pane.select (id);
             });
             // A render replaces the page content and with it the marks.
-            preview.rendered.connect (() => refresh_comments.begin ());
+            preview.rendered.connect (() => refresh_marks.begin ());
             comments_pane.changed.connect (() => refresh_comments.begin ());
+            criteria_pane.quote_activated.connect ((quote) => preview.reveal_quote.begin (quote, 1));
+            criteria_pane.plan_requested.connect (() => {
+                if (plan_path != null) {
+                    open_in_new_window_requested (GLib.File.new_for_path (plan_path));
+                }
+            });
             comments_pane.quote_activated.connect ((quote, occurrence) => {
                 // shortcut: no editor selection, the stored quote is rendered text with no source position; map it back if wanted.
                 preview.reveal_quote.begin (quote, occurrence);
@@ -281,7 +309,63 @@ namespace Mdex {
             } catch (GLib.Error e) {
                 warning ("cannot watch %s: %s", file, e.message);
             }
-            refresh_comments.begin ();
+
+            if (plan_monitor != null) {
+                plan_monitor.cancel ();
+                plan_monitor = null;
+            }
+            plan_path = path != null ? Coverage.plan_path_for (path) : null;
+            ticket_name = path != null ? Path.get_basename (path) : "";
+            if (plan_path != null) {
+                // The plan may not exist yet; its directory is the ticket's, so its creation is noticed too.
+                try {
+                    plan_monitor = GLib.File.new_for_path (plan_path).monitor_file (GLib.FileMonitorFlags.NONE, null);
+                    plan_monitor.changed.connect ((f, other, event) => {
+                        if (event == GLib.FileMonitorEvent.CHANGES_DONE_HINT
+                            || event == GLib.FileMonitorEvent.CREATED
+                            || event == GLib.FileMonitorEvent.DELETED) {
+                            refresh_marks.begin ();
+                        }
+                    });
+                } catch (GLib.Error e) {
+                    warning ("cannot watch %s: %s", plan_path, e.message);
+                }
+            }
+            refresh_marks.begin ();
+        }
+
+        /** Coverage goes first: a comment's mark is then wrapped inside it, so the comment stays the tooltip under the pointer. */
+        private async void refresh_marks () {
+            yield refresh_coverage ();
+            yield refresh_comments ();
+        }
+
+        /** Marks what the ticket's plan covers in the preview and lists the criteria in the pane. A document with no plan beside it has neither. */
+        private async void refresh_coverage () {
+            if (plan_path == null) {
+                criteria_button.visible = false;
+                criteria_button.active = false;
+                return;
+            }
+            Coverage? plan = null;
+            try {
+                string text;
+                FileUtils.get_contents (plan_path, out text);
+                plan = Coverage.parse (text);
+            } catch (GLib.FileError e) {
+                // No readable plan: the ticket shows as any document does.
+            }
+            criteria_button.visible = plan != null;
+            if (plan == null) {
+                criteria_button.active = false;
+            } else if (!criteria_opened) {
+                criteria_opened = true;
+                criteria_button.active = true;
+            }
+            // A plan that names nothing would flag every paragraph of the ticket.
+            bool names_something = plan != null && !(plan.criteria.is_empty && plan.gaps.is_empty);
+            Gee.Set<string>? lost = yield preview.mark_coverage (names_something ? plan : null);
+            criteria_pane.show_plan (plan, ticket_name, lost);
         }
 
         /** Marks the open comments' quotes in the preview, then shows the list with the ones not found flagged. */

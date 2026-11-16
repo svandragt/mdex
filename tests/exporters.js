@@ -60,11 +60,16 @@ class FakeNode {
     }
     this.childNodes = kids;
   }
-  // Only the one selector markQuotes uses, "mark.mdex-comment": the only marks in these trees.
-  querySelectorAll() {
+  // Selectors like "mark.a, mark.b" or ".c": an optional tag and the classes the element must carry. With none, every mark.
+  querySelectorAll(selector = "mark") {
+    const wants = selector.split(",").map((s) => s.trim().split("."));
+    const matches = (c) => wants.some(([tag, ...classes]) => (!tag || c.tagName === tag) && classes.every((k) => c.className.split(" ").includes(k)));
     const found = [];
-    for (const c of this.childNodes) if (c.tagName) { if (c.tagName === "mark") found.push(c); found.push(...c.querySelectorAll()); }
+    for (const c of this.childNodes) if (c.tagName) { if (matches(c)) found.push(c); found.push(...c.querySelectorAll(selector)); }
     return found;
+  }
+  get classList() {
+    return { toggle: (name, on) => { const rest = this.className.split(" ").filter((k) => k && k !== name); this.className = (on ? [...rest, name] : rest).join(" "); } };
   }
   addEventListener(type, f) {
     this.listeners[type] = f;
@@ -471,3 +476,97 @@ assert.strictEqual(posted.length, 1);
 delete sandbox.webkit;
 select(highlight.childNodes[0], "", true);
 assert.doesNotThrow(() => root.listeners.click({ target: highlight }));
+
+// markCoverage shows what a plan's criteria cover of a ticket: the quoted text gets a mark that carries the criterion's number and, as its tooltip, its text. Not covered quotes get a muted mark with the reason.
+const covered = (items) => json(mdex.markCoverage({ covered: items, gaps: [] }));
+const coverageMarks = () => json(root.querySelectorAll("mark.mdex-covered, mark.mdex-gap").map((m) => [m.className, String(m.dataset.n || ""), m.title, m.childNodes.map(html).join("")]));
+setContent(el("p", "The tool lists every ", el("strong", "version"), " offered, and more."));
+assert.strictEqual(covered([{ n: 2, quote: "lists every version", title: "All versions are listed" }]), '{"missing":[]}');
+assert.strictEqual(coverageMarks(), json([
+  ["mdex-covered", "2", "All versions are listed", "lists every "],
+  ["mdex-covered mdex-badge", "2", "All versions are listed", "version"],
+]), "every piece has the number and the tooltip, and the last piece has the badge");
+
+setContent(el("p", "Hello team, please check this."));
+assert.strictEqual(json(mdex.markCoverage({ covered: [], gaps: [{ quote: "Hello team", reason: "a greeting" }] })), '{"missing":[]}');
+assert.strictEqual(coverageMarks(), json([["mdex-gap", "", "a greeting", "Hello team"]]), "a gap is muted, shows its reason and has no number");
+
+// A quote the ticket does not hold is returned, by criterion number (0 for a Not covered quote), and marks nothing.
+setContent(el("p", "Only this text."));
+assert.strictEqual(json(mdex.markCoverage({ covered: [{ n: 1, quote: "this text", title: "a" }, { n: 3, quote: "not here", title: "b" }, { n: 4, quote: "  ", title: "c" }], gaps: [{ quote: "gone", reason: "r" }] })),
+  '{"missing":[{"n":3,"quote":"not here"},{"n":4,"quote":"  "},{"n":0,"quote":"gone"}]}');
+assert.strictEqual(html(root), "<div><p>Only <mark>this text</mark>.</p></div>");
+
+// A plan copies its quotes from the ticket file, so one can hold markdown syntax the page's text does not: code, bold and a link match as their text. A quote that is not found is returned as written.
+setContent(el("p", el("code", "viv show <package> --all"), " lists the ", el("strong", "available"), " versions of ", el("a", "the docs"), "."));
+assert.strictEqual(covered([{ n: 1, quote: "`viv show <package> --all` lists the **available** versions of [the docs](https://x.example).", title: "a" }]), '{"missing":[]}');
+assert.strictEqual(root.querySelectorAll("mark.mdex-covered").map((m) => m.childNodes.map(html).join("")).join("|"), "viv show <package> --all| lists the |available| versions of |the docs|.");
+setContent(el("p", "Plain text"));
+assert.strictEqual(covered([{ n: 2, quote: "`not` here", title: "a" }]), '{"missing":[{"n":2,"quote":"`not` here"}]}');
+
+// Two criteria that quote the same text each mark it.
+setContent(el("p", "alpha beta"));
+covered([{ n: 1, quote: "alpha", title: "one" }, { n: 2, quote: "alpha", title: "two" }]);
+assert.strictEqual(coverageMarks(), json([["mdex-covered mdex-badge", "1", "one", '<mark>alpha</mark>'], ["mdex-covered mdex-badge", "2", "two", "alpha"]]));
+
+// A paragraph or list item of the description that no mark falls in gets the bar. The description is the ticket body: after the title and its metadata table, up to the ## Comments heading.
+const bars = () => json(root.querySelectorAll(".mdex-uncovered").map((e) => e.nodeName + ":" + e.childNodes.filter((c) => !c.tagName).map((c) => c.data).join("")));
+setContent(
+  el("h1", "A ticket"), el("table", el("tr", el("td", "Ticket"), el("td", "Some metadata"))),
+  el("p", "Covered words here."), el("p", "Nobody covers this."),
+  el("p", "A greeting."),
+  el("pre", el("code", "code is not a paragraph")),
+  el("ul", el("li", "covered item"), el("li", "forgotten item"), el("li", "outer item ", el("ul", el("li", "covered inner")))),
+  el("blockquote", el("p", "quoted and forgotten")),
+  el("h2", "Done when"),
+  el("h2", "Comments"), el("p", "Oldest first."), el("p", el("strong", "Someone"), " said something"));
+mdex.markCoverage({ covered: [{ n: 1, quote: "Covered words", title: "a" }, { n: 2, quote: "covered item", title: "b" }, { n: 3, quote: "covered inner", title: "c" }], gaps: [{ quote: "A greeting", reason: "r" }] });
+assert.strictEqual(bars(), json(["P:Nobody covers this.", "LI:forgotten item", "LI:outer item ", "P:quoted and forgotten"]),
+  "a gap mark counts as an answer; the title, table, code, headings and everything after ## Comments are not checked; a list item is checked by its own text, not its nested items'");
+
+// Without the title or table the description starts at the top.
+setContent(el("p", "Plain document."));
+mdex.markCoverage({ covered: [{ n: 1, quote: "nothing there", title: "a" }], gaps: [] });
+assert.strictEqual(bars(), json(["P:Plain document."]));
+// A loose list puts its text in paragraphs; the paragraph is the block, not its item.
+setContent(el("ul", el("li", el("p", "loose and forgotten")), el("li", el("p", "loose covered"))));
+mdex.markCoverage({ covered: [{ n: 1, quote: "loose covered", title: "a" }], gaps: [] });
+assert.strictEqual(bars(), json(["P:loose and forgotten"]));
+// A block with no text of its own is not a gap in the coverage.
+setContent(el("p", el("img")), el("ul", el("li", el("ul", el("li", "only nested")))));
+mdex.markCoverage({ covered: [], gaps: [] });
+assert.strictEqual(bars(), json(["LI:only nested"]));
+
+// Calling again replaces the earlier marks and bars; without a plan nothing is left of either.
+setContent(el("p", "first part"), el("p", "second part"));
+mdex.markCoverage({ covered: [{ n: 1, quote: "first", title: "a" }], gaps: [] });
+assert.strictEqual(bars(), json(["P:second part"]));
+mdex.markCoverage({ covered: [{ n: 1, quote: "second", title: "a" }], gaps: [] });
+assert.strictEqual(bars(), json(["P:first part"]));
+assert.strictEqual(html(root), "<div><p>first part</p><p><mark>second</mark> part</p></div>");
+assert.strictEqual(json(mdex.markCoverage(null)), '{"missing":[]}');
+assert.strictEqual(html(root), "<div><p>first part</p><p>second part</p></div>");
+assert.strictEqual(bars(), "[]");
+assert.strictEqual(root.childNodes[1].childNodes.length, 1);
+
+// Coverage and comments keep their own marks: each call clears only its own, whichever went first.
+setContent(el("p", "alpha beta gamma"));
+mdex.markCoverage({ covered: [{ n: 1, quote: "beta gamma", title: "criterion" }], gaps: [] });
+mdex.markQuotes([{ id: "a", quote: "alpha beta", title: "comment" }]);
+const kinds = () => json(root.querySelectorAll().map((m) => m.className.split(" ")[0]));
+assert.strictEqual(kinds(), json(["mdex-comment", "mdex-covered", "mdex-comment"]), "a comment goes inside the coverage mark, so its tooltip is the innermost");
+mdex.markQuotes([]);
+assert.strictEqual(html(root), "<div><p>alpha <mark>beta gamma</mark></p></div>", "clearing the comments leaves the coverage");
+mdex.markQuotes([{ id: "a", quote: "alpha beta", title: "comment" }]);
+mdex.markCoverage(null);
+assert.strictEqual(kinds(), json(["mdex-comment", "mdex-comment"]), "clearing the coverage leaves the comments");
+assert.strictEqual(html(root), "<div><p><mark>alpha </mark><mark>beta</mark> gamma</p></div>");
+
+// revealQuote reads a quote copied from the ticket file as markCoverage does, so a click on a criterion in the pane finds its text.
+setContent(el("p", el("code", "viv show"), " lists the ", el("strong", "available"), " versions"));
+tops.set(root.childNodes[0].childNodes[0].childNodes[0], 700);
+assert.strictEqual(revealed("`viv show` lists the **available** versions"), json([true, [[0, 700 + 10 - 300]]]));
+assert.strictEqual(revealed("viv show lists"), json([true, [[0, 700 + 10 - 300]]]), "a quote found as written is not read as markdown");
+assert.strictEqual(revealed("`not` there"), json([false, []]));
+
+console.log("ok coverage");

@@ -92,6 +92,7 @@ Options:
                         open_file.begin (file);
                     }
                 });
+                window.open_in_new_window_requested.connect ((file) => open_in_new_window (file, args[0]));
                 window.new_requested.connect ((file) => {
                     if (!open_elsewhere (file, activation_token ())) {
                         create_file.begin (file);
@@ -251,6 +252,27 @@ Options:
                 return false;
             }
             return DocClaim.present_owner (path, token);
+        }
+
+        /**
+         * Shows file in a window of its own and leaves this one as it is. Windows are
+         * separate instances, so that is a new launch, which brings forward the window that already has the file.
+         */
+        private void open_in_new_window (GLib.File file, string program) {
+            string token = activation_token ();
+            if (open_elsewhere (file, token)) {
+                return;
+            }
+            var launcher = new GLib.SubprocessLauncher (GLib.SubprocessFlags.NONE);
+            if (token != "") {
+                launcher.setenv ("XDG_ACTIVATION_TOKEN", token, true);
+            }
+            try {
+                launcher.spawn (program, file.get_path ());
+            } catch (GLib.Error e) {
+                warning ("could not open %s in a new window: %s", file.get_path (), e.message);
+                window.show_toast ("Could not open a new window");
+            }
         }
 
         /** A token from this window's last input, which lets Wayland let another window take focus. */

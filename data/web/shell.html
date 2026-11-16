@@ -143,6 +143,49 @@ html, body {
   cursor: pointer;
 }
 
+/* Coverage tints the text and numbers it with a badge, so a comment's underline stays distinct where they overlap. */
+.markdown-body mark.mdex-covered {
+  background-color: color-mix(in srgb, var(--fgColor-accent, #0969da) 18%, transparent);
+}
+
+/* The badge is generated content, so it is neither selectable nor part of the text that quotes are matched in. */
+.markdown-body mark.mdex-badge::after {
+  content: attr(data-n);
+  margin-left: 3px;
+  padding: 0 5px;
+  border-radius: 8px;
+  font: 600 0.7em/1.6 system-ui, sans-serif;
+  vertical-align: 0.25em;
+  color: var(--bgColor-default, #ffffff);
+  background-color: var(--fgColor-accent, #0969da);
+}
+
+/* Quieter than covered text, so a gap left on purpose reads differently from a forgotten one. */
+.markdown-body mark.mdex-gap {
+  background-color: var(--bgColor-neutral-muted, #818b981f);
+  color: var(--fgColor-muted, #59636e);
+}
+
+/* The bar sits in the page's left padding, beside the block rather than in it; a list item's sits left of its bullet. */
+.markdown-body .mdex-uncovered {
+  position: relative;
+}
+
+.markdown-body .mdex-uncovered::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -14px;
+  width: 3px;
+  border-radius: 2px;
+  background-color: var(--borderColor-attention-emphasis, #9a6700);
+}
+
+.markdown-body li.mdex-uncovered::before {
+  left: calc(-2em - 14px);
+}
+
 #mdex-comment {
   position: absolute;
   z-index: 10;
@@ -188,6 +231,16 @@ html, body {
       .replace(/&quot;/g, '"')
       .replace(/&#0?39;/g, "'")
       .replace(/&amp;/g, "&");
+  }
+
+  // A plan copies its quotes from the ticket file, markdown syntax included; the page holds the text that syntax renders to.
+  function renderedText(markdown) {
+    return unescapeEntities(marked.parseInline(markdown).replace(/<[^>]*>/g, ""));
+  }
+
+  // The pieces of the nth match of a quote that may be copied from the ticket file: as written, else as the text its markdown renders to.
+  function findCopiedQuote(flat, quote, n) {
+    return findQuote(flat, quote, n) || findQuote(flat, renderedText(quote), n);
   }
 
   function collapse(s) {
@@ -255,33 +308,78 @@ html, body {
     return node.nodeType === 3 ? node.data : "\n";
   }
 
-  // Returns the text node holding the wrapped text.
-  function wrap(node, start, end, id, title) {
+  // Returns the text node holding the wrapped text. decorate(mark, stretch) sets what kind of mark it is.
+  function wrap(node, start, end, stretch, decorate) {
     const inner = node.splitText(start);
     inner.splitText(end - start);
     const mark = document.createElement("mark");
-    mark.className = "mdex-comment";
-    mark.dataset.id = id;
-    mark.title = title;
+    decorate(mark, stretch);
     inner.parentNode.replaceChild(mark, inner);
     mark.appendChild(inner);
     return inner;
   }
 
+  function commentMark(mark, stretch) {
+    mark.className = "mdex-comment";
+    mark.dataset.id = stretch.item.id;
+    mark.title = stretch.item.title;
+  }
+
+  // The last piece of a quote is flagged badge. Pieces are wrapped right to left, so the first mark made for a flagged stretch is the one that shows the badge.
+  function coverageMark(mark, stretch) {
+    mark.className = stretch.item.cls + (stretch.badge ? " mdex-badge" : "");
+    stretch.badge = false;
+    if (stretch.item.n) mark.dataset.n = stretch.item.n;
+    mark.title = stretch.item.title;
+  }
+
   // Marks each stretch [{ start, end, item }] of one text node. The node is cut
   // at every edge and the stretches wrapped from the right, so the offsets of
-  // those still to wrap stay valid; a part that several comments cover gets a
-  // mark from each, the first comment outermost.
-  function wrapStretches(node, stretches) {
+  // those still to wrap stay valid; a part that several items cover gets a
+  // mark from each, the first item outermost.
+  function wrapStretches(node, stretches, decorate) {
     const cuts = [...new Set(stretches.flatMap(function (g) { return [g.start, g.end]; }))].sort(function (a, b) { return a - b; });
     for (let k = cuts.length - 2; k >= 0; k--) {
       let target = node, start = cuts[k], end = cuts[k + 1];
       stretches.filter(function (g) { return g.start <= start && end <= g.end; }).forEach(function (g) {
-        target = wrap(target, start, end, g.item.id, g.item.title);
+        target = wrap(target, start, end, g, decorate);
         start = 0;
         end = target.data.length;
       });
     }
+  }
+
+  // The nodes inside an element that belong to it and not to a list item nested in it.
+  function ownNodes(element) {
+    return Array.from(element.childNodes).flatMap(function (n) { return n.nodeName === "LI" ? [] : [n, ...ownNodes(n)]; });
+  }
+
+  // The paragraphs and list items under node. A list item that holds paragraphs is left to them.
+  function collectBlocks(node, blocks) {
+    if (node.nodeName === "P") {
+      blocks.push(node);
+      return;
+    }
+    const children = Array.from(node.childNodes).filter(function (n) { return n.nodeType === 1; });
+    if (node.nodeName === "LI" && !children.some(function (n) { return n.nodeName === "P"; })) blocks.push(node);
+    children.forEach(function (n) { collectBlocks(n, blocks); });
+  }
+
+  function treeText(node) {
+    return node.nodeType === 3 ? node.data : Array.from(node.childNodes).map(treeText).join("");
+  }
+
+  // The ticket body as ticket2md writes a ticket: a title, a table of metadata, the description, then a Comments
+  // heading and the comments. A document without the title or the table starts at its first block.
+  // shortcut: a description that has a "## Comments" heading of its own ends there; ticket2md has no marker to tell it from the real one.
+  function descriptionBlocks() {
+    const top = Array.from(output.childNodes).filter(function (n) { return n.nodeType === 1; });
+    let i = 0;
+    if (top[i]?.nodeName === "H1") i++;
+    if (top[i]?.nodeName === "TABLE") i++;
+    const blocks = [];
+    for (; i < top.length && !(top[i].nodeName === "H2" && collapse(treeText(top[i])) === "Comments"); i++) collectBlocks(top[i], blocks);
+    return blocks;
   }
 
   // The selected text inside the rendered output, whitespace collapsed, or "".
@@ -395,17 +493,55 @@ html, body {
         });
         return !!pieces;
       });
-      stretches.forEach(function (list, i) { if (list.length) wrapStretches(nodes[i], list); });
+      stretches.forEach(function (list, i) { if (list.length) wrapStretches(nodes[i], list, commentMark); });
       return found;
+    },
+
+    // Takes { covered: [{ n, quote, title }], gaps: [{ quote, reason }] }, or null for no plan, and shows what a
+    // plan's criteria cover of the ticket. Marks the first occurrence of each quote (rendered text, whitespace
+    // collapsed): covered text with the criterion's number and its text as the tooltip, a gap with its reason.
+    // A quote copied from the ticket file may hold markdown syntax; if it is not found as written, it is read as
+    // the text that syntax renders to. A paragraph or list item of the description with a mark of neither kind
+    // gets the mdex-uncovered class. Returns { missing: [{ n, quote }] }, the quotes the page does not hold
+    // (n is 0 for a gap). Replaces the marks of an earlier call and leaves comment marks alone.
+    markCoverage(plan) {
+      output.querySelectorAll("mark.mdex-covered, mark.mdex-gap").forEach(function (m) { m.replaceWith(...m.childNodes); });
+      output.normalize();
+      output.querySelectorAll(".mdex-uncovered").forEach(function (e) { e.classList.toggle("mdex-uncovered", false); });
+      const missing = [];
+      if (!plan) return { missing: missing };
+      const items = (plan.covered || []).map(function (c) { return { cls: "mdex-covered", n: c.n, quote: c.quote, title: c.title }; })
+        .concat((plan.gaps || []).map(function (g) { return { cls: "mdex-gap", n: 0, quote: g.quote, title: g.reason }; }));
+      const nodes = textNodes();
+      const flat = flatten(nodes.map(textOf));
+      const stretches = nodes.map(function () { return []; });
+      items.forEach(function (item) {
+        const pieces = findCopiedQuote(flat, item.quote, 1);
+        if (!pieces) {
+          missing.push({ n: item.n, quote: item.quote });
+          return;
+        }
+        pieces.forEach(function (p, k) {
+          if (nodes[p.i].nodeType === 3) stretches[p.i].push({ start: p.start, end: p.end, item: item, badge: item.n > 0 && k === pieces.length - 1 });
+        });
+      });
+      stretches.forEach(function (list, i) { if (list.length) wrapStretches(nodes[i], list, coverageMark); });
+      descriptionBlocks().forEach(function (block) {
+        const own = ownNodes(block);
+        const text = own.some(function (n) { return n.nodeType === 3 && n.data.trim(); });
+        const marked = own.some(function (n) { return n.nodeType === 1 && /\bmdex-(covered|gap)\b/.test(n.className); });
+        block.classList.toggle("mdex-uncovered", text && !marked);
+      });
+      return { missing: missing };
     },
 
     // Scrolls the first piece of the occurrence-th occurrence of a quote
     // (rendered text, whitespace collapsed; same rule as markQuotes) to the
     // middle of the window, selects nothing, and returns whether it was found.
-    // Unlike reveal(), the quote may span bold, links or line breaks.
+    // Unlike reveal(), the quote may span bold, links or line breaks, and may be copied from the ticket file, markdown syntax included, as markCoverage reads it.
     revealQuote(quote, occurrence) {
       const nodes = textNodes();
-      const pieces = findQuote(flatten(nodes.map(textOf)), quote, occurrence);
+      const pieces = findCopiedQuote(flatten(nodes.map(textOf)), quote, occurrence);
       if (!pieces) return false;
       const range = document.createRange();
       range.setStart(nodes[pieces[0].i], pieces[0].start);

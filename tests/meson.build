@@ -46,6 +46,34 @@ comments_test = executable(
 
 test('comments', comments_test)
 
+# Coverage reads a plan's text and compares file names, so it compiles in on its own.
+coverage_test = executable(
+  'test-coverage',
+  files('coverage.vala') + coverage_source,
+  dependencies: dependencies,
+)
+
+test('coverage', coverage_test)
+
+# Builds the pane's widgets, so it needs a display; the test skips (exit 77) without one.
+coveragepane_test = executable(
+  'test-coveragepane',
+  files('coveragepane.vala') + coverage_source + coveragepane_source,
+  dependencies: dependencies,
+)
+
+test('coveragepane', coveragepane_test)
+
+# Builds a MainWindow, so it needs a display; the test skips (exit 77) without one.
+mainwindow_test = executable(
+  'test-mainwindow',
+  files('mainwindow.vala') + mainwindow_source + editor_source + preview_source + comments_source + commentspane_source + coverage_source + coveragepane_source,
+  mdex_resources,
+  dependencies: dependencies,
+)
+
+test('mainwindow', mainwindow_test)
+
 # DiskChange.decide is a pure function, so it compiles in on its own.
 diskchange_test = executable(
   'test-diskchange',
@@ -67,7 +95,7 @@ test('commentspane', commentspane_test)
 # The link allow-list is a static string function on Preview, so no widget is built and no display is needed.
 previewlink_test = executable(
   'test-previewlink',
-  files('previewlink.vala') + preview_source + comments_source,
+  files('previewlink.vala') + preview_source + comments_source + coverage_source,
   dependencies: dependencies,
 )
 
@@ -76,7 +104,7 @@ test('previewlink', previewlink_test)
 # Builds a Preview and loads the shell from the gresource, so it needs a display; the test skips (exit 77) without one.
 previewcsp_test = executable(
   'test-previewcsp',
-  files('previewcsp.vala') + preview_source + comments_source,
+  files('previewcsp.vala') + preview_source + comments_source + coverage_source,
   mdex_resources,
   dependencies: dependencies,
 )
