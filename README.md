@@ -94,6 +94,7 @@ In the ticket's preview:
 - Text under `Not covered:` gets a grey highlight. Hover over it to read the reason.
 - A paragraph or list item in the ticket's description that has neither gets a bar in the left margin, so a gap you did not choose stands out. The title, the table above the description and the comments are not checked.
 - Comment underlines still show on covered text.
+- In any preview, a `<q>` element with a `cite` attribute gets the same blue highlight and shows "Quoted from" and its source on hover, so the quotes in the plan's preview stand out.
 
 The Criteria button in the header bar, which appears only for a ticket with a plan and opens by itself the first time, shows a pane with the criteria:
 

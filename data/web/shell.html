@@ -143,8 +143,10 @@ html, body {
   cursor: pointer;
 }
 
-/* Coverage tints the text and numbers it with a badge, so a comment's underline stays distinct where they overlap. */
-.markdown-body mark.mdex-covered {
+/* Coverage tints the text and numbers it with a badge, so a comment's underline stays distinct where they overlap.
+   A quote that names its source tints like the ticket text it quotes; a <q> without cite keeps the browser's look. */
+.markdown-body mark.mdex-covered,
+.markdown-body q[cite]:not([cite=""]) {
   background-color: color-mix(in srgb, var(--fgColor-accent, #0969da) 18%, transparent);
 }
 
@@ -447,6 +449,9 @@ html, body {
 
     render(md) {
       output.innerHTML = marked.parse(md || "");
+      output.querySelectorAll("q").forEach(function (q) {
+        if (q.getAttribute("cite") && !q.hasAttribute("title")) q.setAttribute("title", "Quoted from " + q.getAttribute("cite"));
+      });
       return "";
     },
 

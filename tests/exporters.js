@@ -22,6 +22,7 @@ class FakeNode {
     this.data = data;
     this.className = "";
     this.title = "";
+    this.attrs = {};
     this.dataset = {};
     this.listeners = {};
     this.parentNode = null;
@@ -71,6 +72,9 @@ class FakeNode {
   get classList() {
     return { toggle: (name, on) => { const rest = this.className.split(" ").filter((k) => k && k !== name); this.className = (on ? [...rest, name] : rest).join(" "); } };
   }
+  setAttribute(name, value) { this.attrs[name] = String(value); }
+  getAttribute(name) { return name in this.attrs ? this.attrs[name] : null; }
+  hasAttribute(name) { return name in this.attrs; }
   addEventListener(type, f) {
     this.listeners[type] = f;
   }
@@ -570,3 +574,12 @@ assert.strictEqual(revealed("viv show lists"), json([true, [[0, 700 + 10 - 300]]
 assert.strictEqual(revealed("`not` there"), json([false, []]));
 
 console.log("ok coverage");
+
+// render() gives a <q> with a cite attribute its source as a tooltip, keeps a title the author wrote, and leaves a <q> without cite, or with an empty one, alone.
+// The fake innerHTML does not parse, so render() keeps the nodes the test built.
+const quote = (attrs, body) => Object.assign(el("q", body), { attrs });
+setContent(el("p", quote({ cite: "391.ticket.md" }, "cited"), " ", quote({}, "plain"), " ", quote({ cite: "a.md", title: "mine" }, "titled"), " ", quote({ cite: "" }, "empty")));
+mdex.render("");
+assert.strictEqual(json(root.querySelectorAll("q").map((q) => q.getAttribute("title"))), json(["Quoted from 391.ticket.md", null, "mine", null]));
+
+console.log("ok quote titles");
