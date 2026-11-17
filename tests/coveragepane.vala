@@ -184,6 +184,12 @@ public static int main (string[] args) {
     pane.show_plan (plan, "391.ticket.md", found_all);
     check ("a changed result rebuilds them", row (pane, "c1") != before && !has_warning (pane, "not found"));
 
+    // A gap's row depends on where its quote is cited: a quote of the ticket is a button, one of another file is not.
+    pane.show_plan (Mdex.Coverage.parse ("## Criteria\nNot covered: <q cite=\"391.ticket.md\">g</q> — r\n"), "391.ticket.md", null);
+    check ("a gap quoting the ticket is a button", row (pane, "g1") is Gtk.Button);
+    pane.show_plan (Mdex.Coverage.parse ("## Criteria\nNot covered: <q cite=\"other.md\">g</q> — r\n"), "391.ticket.md", null);
+    check ("a gap whose cite changes to another file is rebuilt as no button", !(row (pane, "g1") is Gtk.Button));
+
     // No Criteria section, or no plan.
     pane.show_plan (Mdex.Coverage.parse ("# Approach\n"), "391.ticket.md", found_all);
     check ("a plan with no criteria says so", has_label (pane, "no criteria") && rows_named (pane, "c") == 0 && !has_label (pane, "Not covered"));

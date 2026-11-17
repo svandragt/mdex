@@ -86,19 +86,18 @@ namespace Mdex {
         public static Coverage parse (string plan_text) {
             var plan = new Coverage ();
             bool in_criteria = false;
-            // The marker (``` or ~~~) of the code fence being read, whose lines are not the plan's.
-            // shortcut: any fence of that kind closes it, not only one as long as the opener.
+            // The opening run of ``` or ~~~ of the code fence being read, whose lines are not the plan's.
             string? fence = null;
             // The numbered item or Not covered paragraph being read, its lines joined by single spaces.
             string? block = null;
             foreach (string raw in plan_text.split ("\n")) {
                 string line = raw.strip ();
                 if (fence != null) {
-                    if (line.has_prefix (fence)) {
+                    if (line.length >= fence.length && line.replace (fence.substring (0, 1), "") == "") {
                         fence = null;
                     }
-                } else if (line.has_prefix ("```") || line.has_prefix ("~~~")) {
-                    fence = line.substring (0, 3);
+                } else if ((fence = fence_opener (line)) != null) {
+                    continue;
                 } else if (line.has_prefix ("# ") || line.has_prefix ("## ")) {
                     plan.add (block);
                     block = null;
@@ -108,7 +107,7 @@ namespace Mdex {
                 } else if (line == "") {
                     plan.add (block);
                     block = null;
-                } else if (line.has_prefix (GAP_PREFIX) || Regex.match_simple ("^\\d+[.)]\\s", line)) {
+                } else if (line.has_prefix (GAP_PREFIX) || Regex.match_simple ("^\\d+[.)]\\s", raw)) {
                     plan.add (block);
                     block = line;
                 } else if (block != null) {
@@ -117,6 +116,21 @@ namespace Mdex {
             }
             plan.add (block);
             return plan;
+        }
+
+        /** The run of three or more ` or ~ that opens a code fence on line, or null. A backtick fence's info string has no backtick, so "```make install```" is inline code. */
+        private static string? fence_opener (string line) {
+            if (!line.has_prefix ("```") && !line.has_prefix ("~~~")) {
+                return null;
+            }
+            int length = 0;
+            while (length < line.length && line[length] == line[0]) {
+                length++;
+            }
+            if (line[0] == '`' && line.substring (length).contains ("`")) {
+                return null;
+            }
+            return line.substring (0, length);
         }
 
         /** What the page reports for a quote it could not find, and what the pane looks it up by; number is 0 for a Not covered quote. */
@@ -154,7 +168,8 @@ namespace Mdex {
                 }
                 string text = item_re.replace_literal (block, -1, 0, "");
                 var criterion = new Criterion () {
-                    number = criteria.size + 1,
+                    // As Markdown numbers a list: the first marker's number, then one more for each item.
+                    number = criteria.is_empty ? int.parse (block) : criteria.last ().number + 1,
                     text = plain (text),
                 };
                 MatchInfo match;

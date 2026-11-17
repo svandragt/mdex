@@ -54,7 +54,7 @@ namespace Mdex {
                     }
                 }
                 foreach (var g in plan.gaps) {
-                    sig.append_printf ("|gap|%s|%s|%d", g.reason, g.quote != null ? g.quote.text : "", g.quote != null && is_missing (lost, 0, g.quote) ? 1 : 0);
+                    sig.append_printf ("|gap|%s|%s|%s|%d", g.reason, g.quote != null ? g.quote.text : "", g.quote != null ? (g.quote.cite ?? "") : "", g.quote != null && is_missing (lost, 0, g.quote) ? 1 : 0);
                 }
             }
             if (sig.str == shown) {
@@ -153,12 +153,13 @@ namespace Mdex {
             string? target = null;
             if (g.quote != null) {
                 inner.append (note ("“%s”".printf (g.quote.text)));
-                if (!g.quote.is_of (ticket_name)) {
-                    // Another file's text is not looked up in the ticket.
-                } else if (is_missing (lost, 0, g.quote)) {
-                    inner.append (note (not_found (g.quote, ticket_name), "warning"));
-                } else {
-                    target = g.quote.text;
+                // Another file's text is not looked up in the ticket.
+                if (g.quote.is_of (ticket_name)) {
+                    if (is_missing (lost, 0, g.quote)) {
+                        inner.append (note (not_found (g.quote, ticket_name), "warning"));
+                    } else {
+                        target = g.quote.text;
+                    }
                 }
             }
             if (g.reason != "") {

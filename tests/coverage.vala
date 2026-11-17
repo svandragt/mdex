@@ -111,6 +111,14 @@ public static int main (string[] args) {
     plan = Mdex.Coverage.parse ("## Criteria\n1. One — <q>a</q>\n1. Two — <q>b</q>\n1. Three\n\n9. Four\n");
     check ("criteria are numbered by position", plan.criteria.size == 4 && plan.criteria[0].number == 1 && plan.criteria[1].number == 2 && plan.criteria[2].number == 3 && plan.criteria[3].number == 4);
 
+    // Only a line with no indent is a criterion; an indented number is part of the criterion above it. The list's first number is its start, and later ones count on from it.
+    plan = Mdex.Coverage.parse ("## Criteria\n1. One — <q>one</q>\n   1. a1\n   2. a2\n2. Two — <q>two</q>\n");
+    check ("indented numbered lines are not criteria", plan.criteria.size == 2 && plan.criteria[0].text == "One — “one” 1. a1 2. a2" && plan.criteria[1].number == 2);
+    plan = Mdex.Coverage.parse ("## Criteria\n3. A — <q>a</q>\n4. B\n");
+    check ("a list that starts at 3 is numbered 3, 4", plan.criteria.size == 2 && plan.criteria[0].number == 3 && plan.criteria[1].number == 4);
+    plan = Mdex.Coverage.parse ("## Criteria\n1. A\n1. B\n1. C\n");
+    check ("a list of 1. markers counts on from 1", plan.criteria.size == 3 && plan.criteria[0].number == 1 && plan.criteria[1].number == 2 && plan.criteria[2].number == 3);
+
     // # and ## headings end the section; ### does not. A fence hides its lines, whether it is ``` or ~~~, and a heading inside it is no heading.
     plan = Mdex.Coverage.parse ("## Criteria\n1. One — <q>one</q>\n\n# Next\n2. After — <q>after</q>\n\nNot covered: <q>after gap</q> — no\n");
     check ("a level 1 heading ends the Criteria section", plan.criteria.size == 1 && plan.gaps.size == 0);
@@ -124,6 +132,14 @@ public static int main (string[] args) {
     check ("lines inside a fence are not read, and a # line in it ends nothing", plan.criteria.size == 2 && quotes_of (plan.criteria[1]) == "two" && plan.gaps.size == 0);
     plan = Mdex.Coverage.parse ("```\n## Criteria\n1. In a fence — <q>x</q>\n```\n");
     check ("a Criteria heading in a fence starts nothing", plan.criteria.size == 0);
+
+    // A backtick fence's info string has no backtick, so ```make install``` is inline code. A fence closes on the same character, at least as long as the opener, with nothing after it.
+    plan = Mdex.Coverage.parse ("```make install``` runs the build\n\n## Criteria\n1. One — <q>one</q>\n");
+    check ("a line of inline code that starts with ``` opens no fence", plan.criteria.size == 1);
+    plan = Mdex.Coverage.parse ("## Criteria\n1. One — <q>one</q>\n\n````\n```\n2. inside — <q>x</q>\n````\n\n2. Two — <q>two</q>\n");
+    check ("a shorter fence does not close a longer one", plan.criteria.size == 2 && quotes_of (plan.criteria[1]) == "two");
+    plan = Mdex.Coverage.parse ("## Criteria\n1. One — <q>one</q>\n\n```\n``` x\n2. inside — <q>x</q>\n```\n\n2. Two — <q>two</q>\n");
+    check ("text after a closing fence keeps the fence open", plan.criteria.size == 2 && quotes_of (plan.criteria[1]) == "two");
 
     // Only a cite attribute names the source, not the end of another name such as data-cite.
     plan = Mdex.Coverage.parse ("## Criteria\n1. Does it — <q data-cite=\"a.md\">one</q> <q data-cite=\"a.md\" cite=\"b.md\">two</q>\n");
