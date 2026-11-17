@@ -258,7 +258,7 @@ assert.strictEqual(html(root), "<div><p><mark>Some </mark><strong><mark>bold</ma
 
 // revealQuote scrolls the first piece of a quote to the middle of the window, selects nothing, and says whether it found it.
 sandbox.getSelection = () => { throw new Error("revealQuote must not touch the selection"); };
-const revealed = (quote, occurrence) => { scrolls.length = 0; const found = mdex.revealQuote(quote, occurrence); return json([found, scrolls]); };
+const revealed = (quote, occurrence, ticket) => { scrolls.length = 0; const found = mdex.revealQuote(quote, occurrence, ticket); return json([found, scrolls]); };
 setContent(el("p", "See ", el("a", "the docs"), " now.", el("strong", " Bold")), el("p", "A second paragraph"));
 const [see, docs, now] = root.childNodes[0].childNodes.flatMap((n) => (n.tagName ? n.childNodes : [n]));
 tops.set(see, 100).set(docs, 500).set(now, 900);
@@ -566,12 +566,38 @@ mdex.markCoverage(null);
 assert.strictEqual(kinds(), json(["mdex-comment", "mdex-comment"]), "clearing the coverage leaves the comments");
 assert.strictEqual(html(root), "<div><p><mark>alpha </mark><mark>beta</mark> gamma</p></div>");
 
-// revealQuote reads a quote copied from the ticket file as markCoverage does, so a click on a criterion in the pane finds its text.
+// A quote is looked up in the description first, so a phrase that the title, the metadata table or a comment also holds is marked where the description has it. Only a quote the description lacks falls back to the whole page.
+const ticketPage = () => setContent(
+  el("h1", "Show lists versions"), el("table", el("tr", el("td", "Summary"), el("td", "lists versions"))),
+  el("p", "The tool lists versions."),
+  el("h2", "Comments"), el("p", "Someone lists versions too"));
+const markedBlocks = () => json(root.childNodes.map((n) => html(n).includes("<mark>")));
+ticketPage();
+covered([{ n: 1, quote: "lists versions", title: "a" }]);
+assert.strictEqual(markedBlocks(), json([false, false, true, false, false]), "a covered quote is marked in the description, not the title, table or comments");
+ticketPage();
+mdex.markCoverage({ covered: [], gaps: [{ quote: "lists versions", reason: "r" }] });
+assert.strictEqual(markedBlocks(), json([false, false, true, false, false]), "so is a Not covered quote");
+ticketPage();
+covered([{ n: 1, quote: "Show lists", title: "a" }]);
+assert.strictEqual(markedBlocks(), json([true, false, false, false, false]), "a quote the description lacks is marked where the page has it");
+ticketPage();
+assert.strictEqual(covered([{ n: 1, quote: "no such text", title: "a" }]), '{"missing":[{"n":1,"quote":"no such text"}]}');
+
+// The pane's click scrolls to the element that got the mark, whichever else holds the phrase.
+ticketPage();
+tops.set(root.childNodes[0].childNodes[0], 100).set(root.childNodes[2].childNodes[0], 900).set(root.childNodes[4].childNodes[0], 1500);
+assert.strictEqual(revealed("lists versions", 1, true), json([true, [[0, 900 + 10 - 300]]]), "a click on a criterion scrolls to the description's text");
+assert.strictEqual(revealed("Show lists", 1, true), json([true, [[0, 100 + 10 - 300]]]), "and to the title's when the description lacks the quote");
+
+// revealQuote reads a quote copied from the ticket file as markCoverage does, so a click on a criterion in the pane finds its text. A comment's quote is rendered text, so it is not read that way: the page finds what markQuotes found.
 setContent(el("p", el("code", "viv show"), " lists the ", el("strong", "available"), " versions"));
 tops.set(root.childNodes[0].childNodes[0].childNodes[0], 700);
-assert.strictEqual(revealed("`viv show` lists the **available** versions"), json([true, [[0, 700 + 10 - 300]]]));
-assert.strictEqual(revealed("viv show lists"), json([true, [[0, 700 + 10 - 300]]]), "a quote found as written is not read as markdown");
-assert.strictEqual(revealed("`not` there"), json([false, []]));
+assert.strictEqual(revealed("`viv show` lists the **available** versions", 1, true), json([true, [[0, 700 + 10 - 300]]]));
+assert.strictEqual(revealed("viv show lists", 1, true), json([true, [[0, 700 + 10 - 300]]]), "a quote found as written is not read as markdown");
+assert.strictEqual(revealed("`not` there", 1, true), json([false, []]));
+assert.strictEqual(revealed("`viv show` lists the **available** versions"), json([false, []]), "a comment's quote is not read as markdown");
+assert.strictEqual(revealed("viv show lists"), json([true, [[0, 700 + 10 - 300]]]));
 
 console.log("ok coverage");
 

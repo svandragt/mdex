@@ -4,6 +4,11 @@ namespace Mdex {
         public string text = "";
         /** The file the quote is copied from, when the plan names one. */
         public string? cite = null;
+
+        /** Whether the quote is of the ticket called ticket_name: it cites no file, or a file with that name. */
+        public bool is_of (string ticket_name) {
+            return cite == null || Path.get_basename (cite) == ticket_name;
+        }
     }
 
     /** One numbered criterion of a plan, and the ticket text it quotes. */
@@ -40,7 +45,7 @@ namespace Mdex {
         static construct {
             try {
                 quote_re = new Regex ("<q\\b([^>]*)>(.*?)</q>", RegexCompileFlags.CASELESS);
-                cite_re = new Regex ("\\bcite\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", RegexCompileFlags.CASELESS);
+                cite_re = new Regex ("(?<=\\s)cite\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')", RegexCompileFlags.CASELESS);
                 item_re = new Regex ("^\\d+[.)]\\s+");
                 space_re = new Regex ("\\s+");
                 dash_re = new Regex ("^[\\s\\-–—]+");
@@ -51,6 +56,23 @@ namespace Mdex {
 
         public Gee.List<Criterion> criteria = new Gee.ArrayList<Criterion> ();
         public Gee.List<Gap> gaps = new Gee.ArrayList<Gap> ();
+
+        /** Whether the plan quotes the ticket called ticket_name, in a criterion or a Not covered line. */
+        public bool quotes_ticket (string ticket_name) {
+            foreach (var c in criteria) {
+                foreach (var q in c.quotes) {
+                    if (q.is_of (ticket_name)) {
+                        return true;
+                    }
+                }
+            }
+            foreach (var g in gaps) {
+                if (g.quote != null && g.quote.is_of (ticket_name)) {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         /** The plan that goes with a ticket file, or null when the name does not say it is a ticket: x.ticket.md pairs with x.md. Case-sensitive, as the approach skill writes the name. */
         public static string? plan_path_for (string ticket_path) {
@@ -64,14 +86,23 @@ namespace Mdex {
         public static Coverage parse (string plan_text) {
             var plan = new Coverage ();
             bool in_criteria = false;
+            // The marker (``` or ~~~) of the code fence being read, whose lines are not the plan's.
+            // shortcut: any fence of that kind closes it, not only one as long as the opener.
+            string? fence = null;
             // The numbered item or Not covered paragraph being read, its lines joined by single spaces.
             string? block = null;
             foreach (string raw in plan_text.split ("\n")) {
                 string line = raw.strip ();
-                if (line.has_prefix ("## ")) {
+                if (fence != null) {
+                    if (line.has_prefix (fence)) {
+                        fence = null;
+                    }
+                } else if (line.has_prefix ("```") || line.has_prefix ("~~~")) {
+                    fence = line.substring (0, 3);
+                } else if (line.has_prefix ("# ") || line.has_prefix ("## ")) {
                     plan.add (block);
                     block = null;
-                    in_criteria = line.substring (3).strip () == "Criteria";
+                    in_criteria = line.has_prefix ("## ") && line.substring (3).strip () == "Criteria";
                 } else if (!in_criteria) {
                     continue;
                 } else if (line == "") {
@@ -123,7 +154,7 @@ namespace Mdex {
                 }
                 string text = item_re.replace_literal (block, -1, 0, "");
                 var criterion = new Criterion () {
-                    number = int.parse (block),
+                    number = criteria.size + 1,
                     text = plain (text),
                 };
                 MatchInfo match;

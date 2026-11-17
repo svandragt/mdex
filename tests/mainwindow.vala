@@ -4,6 +4,9 @@
 // Open dialog takes, which replaces the document. Starting the window, or bringing forward one that
 // already shows the plan, is the Application's job and has no test: it needs a second process.
 //
+// It also checks that a plan which quotes nothing of the ticket draws no bar beside the ticket's paragraphs,
+// since every paragraph would then read as left out. The bars are drawn by the page, so the check loads it.
+//
 // It builds a MainWindow, so it needs a display and skips (exit 77) without one.
 
 private int failures = 0;
@@ -44,6 +47,64 @@ private Gtk.Button? button (Gtk.Widget where, string label) {
     return null;
 }
 
+private Mdex.Preview? preview_of (Gtk.Widget where) {
+    var preview = where as Mdex.Preview;
+    for (var child = where.get_first_child (); preview == null && child != null; child = child.get_next_sibling ()) {
+        preview = preview_of (child);
+    }
+    return preview;
+}
+
+private async void wait_ms (uint ms) {
+    GLib.Timeout.add (ms, () => {
+        wait_ms.callback ();
+        return GLib.Source.REMOVE;
+    });
+    yield;
+}
+
+/** The paragraphs of the page that carry the bar, polled until the page says want or the time is up. */
+private async int bars (Mdex.Preview preview, int want) {
+    int found = -1;
+    for (int i = 0; i < 100 && found != want; i++) {
+        yield wait_ms (50);
+        try {
+            var result = yield preview.call_async_javascript_function (
+                "return document.querySelectorAll('.mdex-uncovered').length;", -1, null, null, null, null);
+            found = (int) result.to_int32 ();
+        } catch (GLib.Error e) {
+            found = -1;
+        }
+    }
+    return found;
+}
+
+private async void check_bars (Mdex.MainWindow window, string ticket, string plan) {
+    var preview = preview_of (window);
+    check ("the window has a preview", preview != null);
+    string text = "# Ticket\n\nThe tool lists versions.\n\nNobody covers this.\n";
+    try {
+        FileUtils.set_contents (ticket, text);
+        FileUtils.set_contents (plan, "## Criteria\n1. Lists — <q cite=\"391.ticket.md\">The tool lists versions.</q>\n");
+    } catch (GLib.FileError e) {
+        check ("the files are written: %s".printf (e.message), false);
+        return;
+    }
+    window.set_document (ticket);
+    window.set_text (text);
+    check ("a plan that quotes the ticket bars the paragraph it leaves out", (yield bars (preview, 1)) == 1);
+
+    // Nothing here is the ticket's: an added criterion and a quote of another file.
+    try {
+        FileUtils.set_contents (plan, "## Criteria\n1. Lists\n2. Other — <q cite=\"other.md\">The tool lists versions.</q>\n");
+    } catch (GLib.FileError e) {
+        check ("the plan is rewritten: %s".printf (e.message), false);
+        return;
+    }
+    window.set_document (ticket);
+    check ("a plan that quotes nothing of the ticket bars nothing", (yield bars (preview, 0)) == 0);
+}
+
 public static int main (string[] args) {
     string dir;
     try {
@@ -78,6 +139,14 @@ public static int main (string[] args) {
     open.clicked ();
     check ("Open plan asks for the plan beside the ticket in a new window", in_new_window != null && in_new_window.get_path () == plan);
     check ("Open plan does not replace this window's document", replaced == 0);
+
+    var loop = new GLib.MainLoop ();
+    window.present ();
+    check_bars.begin (window, ticket, plan, (obj, res) => {
+        check_bars.end (res);
+        loop.quit ();
+    });
+    loop.run ();
 
     remove_tree (dir);
     return failures == 0 ? 0 : 1;

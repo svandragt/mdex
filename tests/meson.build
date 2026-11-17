@@ -111,6 +111,16 @@ previewcsp_test = executable(
 
 test('previewcsp', previewcsp_test)
 
+# Builds a Preview and loads the shell from the gresource, so it needs a display; the test skips (exit 77) without one.
+previewcoverage_test = executable(
+  'test-previewcoverage',
+  files('previewcoverage.vala') + preview_source + comments_source + coverage_source,
+  mdex_resources,
+  dependencies: dependencies,
+)
+
+test('previewcoverage', previewcoverage_test)
+
 # The exporters are JavaScript, so this one runs under node when there is one.
 node = find_program('node', required: false)
 if node.found()

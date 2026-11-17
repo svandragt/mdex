@@ -107,6 +107,48 @@ public static int main (string[] args) {
     plan = Mdex.Coverage.parse ("");
     check ("an empty plan is empty", plan.criteria.size == 0 && plan.gaps.size == 0);
 
+    // A criterion's number is its position in the list, as the Markdown renders it, not the number the marker is written with.
+    plan = Mdex.Coverage.parse ("## Criteria\n1. One — <q>a</q>\n1. Two — <q>b</q>\n1. Three\n\n9. Four\n");
+    check ("criteria are numbered by position", plan.criteria.size == 4 && plan.criteria[0].number == 1 && plan.criteria[1].number == 2 && plan.criteria[2].number == 3 && plan.criteria[3].number == 4);
+
+    // # and ## headings end the section; ### does not. A fence hides its lines, whether it is ``` or ~~~, and a heading inside it is no heading.
+    plan = Mdex.Coverage.parse ("## Criteria\n1. One — <q>one</q>\n\n# Next\n2. After — <q>after</q>\n\nNot covered: <q>after gap</q> — no\n");
+    check ("a level 1 heading ends the Criteria section", plan.criteria.size == 1 && plan.gaps.size == 0);
+    plan = Mdex.Coverage.parse ("## Criteria\n1. One — <q>one</q>\n\n### Notes\n2. Two — <q>two</q>\n");
+    check ("a level 3 heading does not", plan.criteria.size == 2);
+    plan = Mdex.Coverage.parse (
+        "## Criteria\n1. One — <q>one</q>\n\n"
+        + "```sh\n# a comment in code\n2. not a criterion — <q>x</q>\nNot covered: <q>y</q> — no\n```\n\n"
+        + "  ~~~\n3. nor this — <q>z</q>\n  ~~~\n\n"
+        + "2. Two — <q>two</q>\n");
+    check ("lines inside a fence are not read, and a # line in it ends nothing", plan.criteria.size == 2 && quotes_of (plan.criteria[1]) == "two" && plan.gaps.size == 0);
+    plan = Mdex.Coverage.parse ("```\n## Criteria\n1. In a fence — <q>x</q>\n```\n");
+    check ("a Criteria heading in a fence starts nothing", plan.criteria.size == 0);
+
+    // Only a cite attribute names the source, not the end of another name such as data-cite.
+    plan = Mdex.Coverage.parse ("## Criteria\n1. Does it — <q data-cite=\"a.md\">one</q> <q data-cite=\"a.md\" cite=\"b.md\">two</q>\n");
+    check ("data-cite is not the cite", plan.criteria[0].quotes[0].cite == null);
+    check ("a cite after another attribute is read", plan.criteria[0].quotes[1].cite == "b.md");
+
+    // A quote is of the ticket when it cites no file or one with the ticket's name; a quote of another file is not looked up in the ticket.
+    plan = Mdex.Coverage.parse (
+        "## Criteria\n1. One — <q>bare</q> <q cite=\"391.ticket.md\">named</q> <q cite=\"docs/391.ticket.md\">path</q> <q cite=\"other.md\">other</q> <q cite=\"x391.ticket.md\">suffix</q>\n");
+    var ticket_quotes = new string[0];
+    foreach (var q in plan.criteria[0].quotes) {
+        if (q.is_of ("391.ticket.md")) {
+            ticket_quotes += q.text;
+        }
+    }
+    check ("a quote with no cite, the ticket's name or a path to it is of the ticket", string.joinv (" | ", ticket_quotes) == "bare | named | path");
+
+    // The plan names something to cover only if a quote is of the ticket, in a criterion or a Not covered line.
+    check ("a quote of the ticket is something", plan.quotes_ticket ("391.ticket.md"));
+    plan = Mdex.Coverage.parse ("## Criteria\n1. Added — nothing quoted.\n2. Other — <q cite=\"other.md\">q</q>\n\nNot covered: <q cite=\"other.md\">g</q> — r\nNot covered: a bare reason\n");
+    check ("criteria without a ticket quote name nothing", plan.criteria.size == 2 && plan.gaps.size == 2 && !plan.quotes_ticket ("391.ticket.md"));
+    plan = Mdex.Coverage.parse ("## Criteria\n1. Added — nothing quoted.\n\nNot covered: <q>g</q> — r\n");
+    check ("a Not covered quote of the ticket counts", plan.quotes_ticket ("391.ticket.md"));
+    check ("an empty plan names nothing", !Mdex.Coverage.parse ("").quotes_ticket ("391.ticket.md"));
+
     // The page reports a missing quote by criterion number (0 for a gap) and text; the pane looks it up by the same key.
     check ("a missing quote's key names its criterion", Mdex.Coverage.missing_key (3, "gone") != Mdex.Coverage.missing_key (4, "gone"));
     check ("a gap's key differs from a criterion's", Mdex.Coverage.missing_key (0, "gone") != Mdex.Coverage.missing_key (1, "gone"));

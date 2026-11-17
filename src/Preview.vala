@@ -243,21 +243,23 @@ namespace Mdex {
 
         /**
          * Shows what the plan covers of the ticket in the page, and returns the Coverage.missing_key of each quote
-         * the page does not hold. A null plan clears the marks. Null until the page has loaded, or if the call fails.
+         * the page does not hold. Only the quotes of the ticket called ticket_name are looked up. A null plan clears
+         * the marks. Null until the page has loaded, or if the call fails.
          */
-        public async Gee.Set<string>? mark_coverage (Coverage? plan) {
+        public async Gee.Set<string>? mark_coverage (Coverage? plan, string ticket_name) {
             if (!loaded) {
                 return null;
             }
             var list = new Json.Builder ();
-            if (plan == null) {
-                list.add_null_value ();
-            } else {
+            if (plan != null) {
                 list.begin_object ();
                 list.set_member_name ("covered");
                 list.begin_array ();
                 foreach (var c in plan.criteria) {
                     foreach (var q in c.quotes) {
+                        if (!q.is_of (ticket_name)) {
+                            continue;
+                        }
                         list.begin_object ();
                         list.set_member_name ("n");
                         list.add_int_value (c.number);
@@ -272,7 +274,7 @@ namespace Mdex {
                 list.set_member_name ("gaps");
                 list.begin_array ();
                 foreach (var g in plan.gaps) {
-                    if (g.quote == null) {
+                    if (g.quote == null || !g.quote.is_of (ticket_name)) {
                         continue;
                     }
                     list.begin_object ();
@@ -286,7 +288,8 @@ namespace Mdex {
                 list.end_object ();
             }
             var b = new GLib.VariantBuilder (new GLib.VariantType ("a{sv}"));
-            b.add ("{sv}", "plan", new GLib.Variant.string (Json.to_string (list.get_root (), false)));
+            // A builder cannot hold a bare null, so a missing plan is sent as the JSON text of one.
+            b.add ("{sv}", "plan", new GLib.Variant.string (plan != null ? Json.to_string (list.get_root (), false) : "null"));
             Gee.Set<string>? missing = null;
             try {
                 var result = yield call_async_javascript_function (
@@ -305,8 +308,11 @@ namespace Mdex {
             return missing;
         }
 
-        /** Scrolls the page to the first piece of the nth (1-based) occurrence of quote, which may span bold, links or line breaks. Returns whether it was found. */
-        public async bool reveal_quote (string quote, int n) {
+        /**
+         * Scrolls the page to the first piece of the nth (1-based) occurrence of quote, which may span bold, links or line breaks. Returns whether it was found.
+         * With ticket set, the quote is one a plan copied from the ticket file, and is found where mark_coverage marks it.
+         */
+        public async bool reveal_quote (string quote, int n, bool ticket = false) {
             bool found = false;
             if (!loaded) {
                 return found;
@@ -314,9 +320,11 @@ namespace Mdex {
             var b = new GLib.VariantBuilder (new GLib.VariantType ("a{sv}"));
             b.add ("{sv}", "quote", new GLib.Variant.string (quote));
             b.add ("{sv}", "n", new GLib.Variant.int32 (n));
+            // A string, as in set_theme: WebKit's argument vardict rejects GVariant booleans.
+            b.add ("{sv}", "ticket", new GLib.Variant.string (ticket ? "true" : ""));
             try {
                 var result = yield call_async_javascript_function (
-                    "return window.mdex.revealQuote(quote, n);", -1, b.end (), null, null, null);
+                    "return window.mdex.revealQuote(quote, n, !!ticket);", -1, b.end (), null, null, null);
                 found = result.to_boolean ();
             } catch (GLib.Error e) {
                 warning ("reveal_quote failed: %s", e.message);

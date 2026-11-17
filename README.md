@@ -88,6 +88,8 @@ The plan's `## Criteria` section drives it. Each numbered criterion quotes the t
 Not covered: <q cite="391.ticket.md">a greeting</q> — it asks for nothing.
 ```
 
+A `<q>` whose `cite` names another file is not looked up in the ticket, so a criterion that quotes only other files shows as "Added".
+
 In the ticket's preview:
 
 - Quoted text gets a blue highlight and a badge with the criterion's number. Hover over it to read the criterion.
@@ -100,7 +102,7 @@ The Criteria button in the header bar, which appears only for a ticket with a pl
 
 - Each criterion shows its number and text, and says "Quotes the ticket", "Added" when it has no quote, or "Quote not found in 391.ticket.md" with the missing quote, because a quote may be misquoted.
 - The Not covered lines follow, each with its reason.
-- Click a criterion or a Not covered line to scroll the preview to its first highlight.
+- Click a criterion or a Not covered line, or move to it with Tab and press Enter, to scroll the preview to its first highlight.
 - Open plan opens the plan in a new window and leaves the ticket as it is. If a window already shows the plan, that window comes to the front instead.
 
 Edit the plan and the ticket window updates.

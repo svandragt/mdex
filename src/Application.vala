@@ -92,7 +92,7 @@ Options:
                         open_file.begin (file);
                     }
                 });
-                window.open_in_new_window_requested.connect ((file) => open_in_new_window (file, args[0]));
+                window.open_in_new_window_requested.connect ((file) => open_in_new_window (file, running_program (args[0])));
                 window.new_requested.connect ((file) => {
                     if (!open_elsewhere (file, activation_token ())) {
                         create_file.begin (file);
@@ -273,6 +273,20 @@ Options:
                 warning ("could not open %s in a new window: %s", file.get_path (), e.message);
                 window.show_toast ("Could not open a new window");
             }
+        }
+
+        /** The executable this process runs, so a new window is the same build; argv[0] may be a bare name or a path that no longer resolves. */
+        private static string running_program (string argv0) {
+            try {
+                string exe = GLib.FileUtils.read_link ("/proc/self/exe");
+                // An executable replaced while running reads as "<path> (deleted)", which is not a file.
+                if (GLib.FileUtils.test (exe, GLib.FileTest.IS_EXECUTABLE)) {
+                    return exe;
+                }
+            } catch (GLib.FileError e) {
+                warning ("cannot read the running program: %s", e.message);
+            }
+            return argv0;
         }
 
         /** A token from this window's last input, which lets Wayland let another window take focus. */

@@ -374,14 +374,31 @@ html, body {
   // The ticket body as ticket2md writes a ticket: a title, a table of metadata, the description, then a Comments
   // heading and the comments. A document without the title or the table starts at its first block.
   // shortcut: a description that has a "## Comments" heading of its own ends there; ticket2md has no marker to tell it from the real one.
-  function descriptionBlocks() {
+  function descriptionRoots() {
     const top = Array.from(output.childNodes).filter(function (n) { return n.nodeType === 1; });
     let i = 0;
     if (top[i]?.nodeName === "H1") i++;
     if (top[i]?.nodeName === "TABLE") i++;
+    const roots = [];
+    for (; i < top.length && !(top[i].nodeName === "H2" && collapse(treeText(top[i])) === "Comments"); i++) roots.push(top[i]);
+    return roots;
+  }
+
+  function descriptionBlocks() {
     const blocks = [];
-    for (; i < top.length && !(top[i].nodeName === "H2" && collapse(treeText(top[i])) === "Comments"); i++) collectBlocks(top[i], blocks);
+    descriptionRoots().forEach(function (root) { collectBlocks(root, blocks); });
     return blocks;
+  }
+
+  // Finds a quote copied from the ticket file, in the description first, so a phrase that the title, the metadata table
+  // or a comment also holds does not take the mark; only a quote the description lacks is looked for in the whole page.
+  // Takes the page's text nodes and returns a function of (quote, n) that works as findCopiedQuote does.
+  function ticketFinder(nodes) {
+    const roots = descriptionRoots();
+    // Text outside the description is one character that no quote holds, so a quote cannot run into it from the description.
+    const described = flatten(nodes.map(function (node) { return roots.some(function (r) { return r.contains(node); }) ? textOf(node) : "\0"; }));
+    const whole = flatten(nodes.map(textOf));
+    return function (quote, n) { return findCopiedQuote(described, quote, n) || findCopiedQuote(whole, quote, n); };
   }
 
   // The selected text inside the rendered output, whitespace collapsed, or "".
@@ -518,10 +535,10 @@ html, body {
       const items = (plan.covered || []).map(function (c) { return { cls: "mdex-covered", n: c.n, quote: c.quote, title: c.title }; })
         .concat((plan.gaps || []).map(function (g) { return { cls: "mdex-gap", n: 0, quote: g.quote, title: g.reason }; }));
       const nodes = textNodes();
-      const flat = flatten(nodes.map(textOf));
+      const find = ticketFinder(nodes);
       const stretches = nodes.map(function () { return []; });
       items.forEach(function (item) {
-        const pieces = findCopiedQuote(flat, item.quote, 1);
+        const pieces = find(item.quote, 1);
         if (!pieces) {
           missing.push({ n: item.n, quote: item.quote });
           return;
@@ -543,10 +560,12 @@ html, body {
     // Scrolls the first piece of the occurrence-th occurrence of a quote
     // (rendered text, whitespace collapsed; same rule as markQuotes) to the
     // middle of the window, selects nothing, and returns whether it was found.
-    // Unlike reveal(), the quote may span bold, links or line breaks, and may be copied from the ticket file, markdown syntax included, as markCoverage reads it.
-    revealQuote(quote, occurrence) {
+    // Unlike reveal(), the quote may span bold, links or line breaks. With ticket
+    // set, the quote is copied from the ticket file, markdown syntax included, and
+    // is found where markCoverage marks it; a comment's quote is rendered text.
+    revealQuote(quote, occurrence, ticket) {
       const nodes = textNodes();
-      const pieces = findCopiedQuote(flatten(nodes.map(textOf)), quote, occurrence);
+      const pieces = ticket ? ticketFinder(nodes)(quote, occurrence) : findQuote(flatten(nodes.map(textOf)), quote, occurrence);
       if (!pieces) return false;
       const range = document.createRange();
       range.setStart(nodes[pieces[0].i], pieces[0].start);

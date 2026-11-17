@@ -121,8 +121,13 @@ namespace Mdex {
                 wrap_mode = Pango.WrapMode.WORD_CHAR,
             });
             string? target = null;
+            bool quotes_ticket = false;
             bool flagged = false;
             foreach (var q in c.quotes) {
+                if (!q.is_of (ticket_name)) {
+                    continue;
+                }
+                quotes_ticket = true;
                 if (is_missing (lost, c.number, q)) {
                     inner.append (note (not_found (q, ticket_name), "warning"));
                     flagged = true;
@@ -130,7 +135,7 @@ namespace Mdex {
                     target = q.text;
                 }
             }
-            if (c.quotes.is_empty) {
+            if (!quotes_ticket) {
                 inner.append (note ("Added"));
             } else if (!flagged) {
                 inner.append (note ("Quotes the ticket"));
@@ -148,7 +153,9 @@ namespace Mdex {
             string? target = null;
             if (g.quote != null) {
                 inner.append (note ("“%s”".printf (g.quote.text)));
-                if (is_missing (lost, 0, g.quote)) {
+                if (!g.quote.is_of (ticket_name)) {
+                    // Another file's text is not looked up in the ticket.
+                } else if (is_missing (lost, 0, g.quote)) {
                     inner.append (note (not_found (g.quote, ticket_name), "warning"));
                 } else {
                     target = g.quote.text;
@@ -160,19 +167,24 @@ namespace Mdex {
             return row ("g%d".printf (position), inner, target);
         }
 
-        /** A card that sends target to the preview when clicked; with no target, a click does nothing. */
+        /** A card that sends target to the preview when clicked, or when Enter or Space presses it; with no target it is a plain card. */
         private Gtk.Widget row (string name, Gtk.Widget inner, string? target) {
-            var card = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) {
+            if (target == null) {
+                var card = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) {
+                    name = name,
+                    css_classes = { "card" },
+                };
+                card.append (inner);
+                return card;
+            }
+            // A button takes focus, answers the keyboard and tells a screen reader it can be pressed.
+            var button = new Gtk.Button () {
                 name = name,
+                child = inner,
                 css_classes = { "card" },
             };
-            card.append (inner);
-            if (target != null) {
-                var click = new Gtk.GestureClick ();
-                click.pressed.connect (() => quote_activated (target));
-                card.add_controller (click);
-            }
-            return card;
+            button.clicked.connect (() => quote_activated (target));
+            return button;
         }
     }
 }

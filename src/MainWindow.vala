@@ -195,7 +195,7 @@ namespace Mdex {
             // A render replaces the page content and with it the marks.
             preview.rendered.connect (() => refresh_marks.begin ());
             comments_pane.changed.connect (() => refresh_comments.begin ());
-            criteria_pane.quote_activated.connect ((quote) => preview.reveal_quote.begin (quote, 1));
+            criteria_pane.quote_activated.connect ((quote) => preview.reveal_quote.begin (quote, 1, true));
             criteria_pane.plan_requested.connect (() => {
                 if (plan_path != null) {
                     open_in_new_window_requested (GLib.File.new_for_path (plan_path));
@@ -362,9 +362,9 @@ namespace Mdex {
                 criteria_opened = true;
                 criteria_button.active = true;
             }
-            // A plan that names nothing would flag every paragraph of the ticket.
-            bool names_something = plan != null && !(plan.criteria.is_empty && plan.gaps.is_empty);
-            Gee.Set<string>? lost = yield preview.mark_coverage (names_something ? plan : null);
+            // A plan that quotes nothing of the ticket would flag every paragraph of its description.
+            bool names_something = plan != null && plan.quotes_ticket (ticket_name);
+            Gee.Set<string>? lost = yield preview.mark_coverage (names_something ? plan : null, ticket_name);
             criteria_pane.show_plan (plan, ticket_name, lost);
         }
 

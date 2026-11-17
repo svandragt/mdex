@@ -79,14 +79,11 @@ private Gtk.Button? button (Gtk.Widget where, string label) {
     return null;
 }
 
-/** Presses the row the way a mouse click does. */
+/** Activates the row as a click, Enter or Space does: a row that goes somewhere is a button, and its clicked signal fires. */
 private void click (Gtk.Widget? row) {
-    var controllers = row.observe_controllers ();
-    for (uint i = 0; i < controllers.get_n_items (); i++) {
-        var gesture = controllers.get_item (i) as Gtk.GestureClick;
-        if (gesture != null) {
-            gesture.pressed (1, 0, 0);
-        }
+    var button = row as Gtk.Button;
+    if (button != null) {
+        button.clicked ();
     }
 }
 
@@ -95,10 +92,12 @@ private const string PLAN = """## Criteria
 2. Path is empty — <q>the next line</q> and <q cite="391.ticket.md">a path</q>
 3. Plain behaviour stays — added: existing behaviour, see "Not covered".
 4. Fails clearly — <q cite="other.md">gone text</q>
+5. Moved — <q cite="docs/391.ticket.md">gone path</q>
 
 Not covered: <q cite="391.ticket.md">a greeting</q> — it asks for nothing.
 Not covered: <q>lost gap</q> — a deliberate gap that is gone.
 Not covered: Package "<name>" not found. — no quote on this line.
+Not covered: <q cite="other.md">other gap</q> — a quote of another file.
 """;
 
 public static int main (string[] args) {
@@ -121,22 +120,32 @@ public static int main (string[] args) {
     var lost = new Gee.HashSet<string> ();
     lost.add (Mdex.Coverage.missing_key (2, "the next line"));
     lost.add (Mdex.Coverage.missing_key (4, "gone text"));
+    lost.add (Mdex.Coverage.missing_key (5, "gone path"));
+    lost.add (Mdex.Coverage.missing_key (0, "other gap"));
     lost.add (Mdex.Coverage.missing_key (0, "lost gap"));
     pane.show_plan (plan, "391.ticket.md", lost);
 
-    check ("one row per criterion", rows_named (pane, "c") == 4);
+    check ("one row per criterion", rows_named (pane, "c") == 5);
     check ("a row shows its number and text", has_label (row (pane, "c1"), "1.") && has_label (row (pane, "c1"), "Lists versions"));
     check ("a criterion whose quotes are found says so", has_label (row (pane, "c1"), "Quotes the ticket") && !has_warning (row (pane, "c1"), "not found"));
     check ("a criterion without a <q> is Added", has_label (row (pane, "c3"), "Added") && !has_label (row (pane, "c3"), "Quotes the ticket"));
     check ("an Added criterion is not flagged", !has_warning (row (pane, "c3"), "not found"));
     check ("a missing quote with no cite names the ticket file", has_warning (row (pane, "c2"), "Quote not found in 391.ticket.md: “the next line”"));
     check ("a criterion with a found and a missing quote shows only the missing one", !has_label (row (pane, "c2"), "Quotes the ticket") && !has_warning (row (pane, "c2"), "a path"));
-    check ("a missing quote names the file it cites", has_warning (row (pane, "c4"), "Quote not found in other.md: “gone text”"));
+    check ("a missing quote names the path it cites", has_warning (row (pane, "c5"), "Quote not found in docs/391.ticket.md: “gone path”"));
+    // A quote of another file is not looked up in the ticket, so it covers nothing and cannot be missing from it.
+    check ("a criterion that quotes only another file is Added", has_label (row (pane, "c4"), "Added") && !has_label (row (pane, "c4"), "Quotes the ticket") && !has_warning (row (pane, "c4"), "not found"));
 
-    check ("a Not covered section lists each line", has_label (pane, "Not covered") && rows_named (pane, "g") == 3);
+    check ("a Not covered section lists each line", has_label (pane, "Not covered") && rows_named (pane, "g") == 4);
     check ("a gap shows its quote and its reason", has_label (row (pane, "g1"), "a greeting") && has_label (row (pane, "g1"), "it asks for nothing."));
     check ("a gap whose quote is missing gets the same warning", has_warning (row (pane, "g2"), "Quote not found in 391.ticket.md: “lost gap”"));
     check ("a gap with no quote shows its reason and no warning", has_label (row (pane, "g3"), "no quote on this line") && !has_warning (row (pane, "g3"), "not found"));
+
+    check ("a gap that quotes another file is listed without a warning", has_label (row (pane, "g4"), "other gap") && has_label (row (pane, "g4"), "a quote of another file.") && !has_warning (row (pane, "g4"), "not found"));
+
+    // A row that goes somewhere is a focusable button, so the keyboard and a screen reader reach it; one that goes nowhere is not.
+    check ("a row with a quote is a focusable button", row (pane, "c1") is Gtk.Button && row (pane, "c1").focusable && row (pane, "c1").get_accessible_role () == Gtk.AccessibleRole.BUTTON && row (pane, "g1") is Gtk.Button);
+    check ("a row with nothing to show is not", !(row (pane, "c3") is Gtk.Button) && !row (pane, "c3").focusable && !(row (pane, "g3") is Gtk.Button));
 
     // A click goes to the criterion's first quote that was found, so a missing first quote is skipped.
     click (row (pane, "c1"));
@@ -145,12 +154,14 @@ public static int main (string[] args) {
     check ("a criterion activates its first found quote", activated == "a path" && activations == 2);
     click (row (pane, "c3"));
     click (row (pane, "c4"));
-    check ("an Added criterion and one with every quote missing activate nothing", activations == 2);
+    click (row (pane, "c5"));
+    check ("an Added criterion, one that quotes another file and one with every quote missing activate nothing", activations == 2);
     click (row (pane, "g1"));
     check ("a gap with a quote activates it", activated == "a greeting" && activations == 3);
     click (row (pane, "g2"));
     click (row (pane, "g3"));
-    check ("a missing gap quote and a gap without one activate nothing", activations == 3);
+    click (row (pane, "g4"));
+    check ("a missing gap quote, a gap quoting another file and a gap without one activate nothing", activations == 3);
 
     // Open plan is always at the top.
     var open = button (pane, "Open plan");
@@ -162,7 +173,7 @@ public static int main (string[] args) {
 
     // Until the page has said what it found, nothing is flagged.
     pane.show_plan (plan, "391.ticket.md", null);
-    check ("with no result from the page nothing is flagged", !has_warning (pane, "not found") && has_label (row (pane, "c4"), "Quotes the ticket"));
+    check ("with no result from the page nothing is flagged", !has_warning (pane, "not found") && has_label (row (pane, "c5"), "Quotes the ticket"));
 
     // A refresh with nothing new keeps the rows, so a scroll position and a click in progress survive.
     pane.show_plan (plan, "391.ticket.md", lost);
