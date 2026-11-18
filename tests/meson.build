@@ -130,6 +130,8 @@ previewpdf_test = executable(
 )
 
 test('previewpdf', previewpdf_test)
+# GTK names the Print to File printer in the user's language. Without the Dutch locale installed this runs in English.
+test('previewpdf-nl', previewpdf_test, env: {'LANG': 'nl_NL.UTF-8', 'LANGUAGE': 'nl'})
 
 # The exporters are JavaScript, so this one runs under node when there is one.
 node = find_program('node', required: false)

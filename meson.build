@@ -5,6 +5,9 @@ project('mdex', 'vala', 'c',
 gnome = import('gnome')
 valac = meson.get_compiler('vala')
 
+# GLib.dgettext includes gi18n-lib.h, which refuses to compile without a gettext package name.
+add_project_arguments('-DGETTEXT_PACKAGE="mdex"', language: 'c')
+
 dependencies = [
   dependency('gtk4'),
   dependency('granite-7'),

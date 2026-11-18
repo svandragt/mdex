@@ -47,7 +47,7 @@ Export from the header bar menu, or with a shortcut:
 
 The result lands on the clipboard, ready to paste.
 
-To share the preview as a file, choose Export to PDF… in the same menu. The PDF is an A4 copy in light colours, without the comment underlines, coverage tints and margin bars.
+To share the preview as a file, choose Export to PDF… in the same menu. The PDF is an A4 copy in light colours, without the comment underlines, coverage tints and margin bars. After saving, mdex opens the folder with the PDF selected.
 
 ## Revisions
 

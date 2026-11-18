@@ -250,6 +250,19 @@ html, body {
     overflow-wrap: anywhere;
   }
 
+  /* github-markdown.css lets a table scroll sideways at its own width, which a page cuts off, so fit it to the page.
+     Fixed layout, because auto layout shrinks short columns to one character wide once long cells can break anywhere. */
+  .markdown-body table {
+    display: table;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .markdown-body td,
+  .markdown-body th {
+    overflow-wrap: anywhere;
+  }
+
   html[data-theme="dark"],
   html[data-theme="dark"] .markdown-body {
     color-scheme: light;

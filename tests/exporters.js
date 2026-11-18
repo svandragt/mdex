@@ -632,6 +632,13 @@ for (const selector of [".markdown-body pre", ".markdown-body pre > code"]) {
   assert.ok(prints(selector, "overflow-wrap: anywhere"), `print breaks unbroken text in ${selector}`);
 }
 assert.ok(prints(".markdown-body pre", "overflow: visible"), "print does not clip code at the page edge");
+// github-markdown.css makes a table scroll sideways at its own width, which a page cuts off.
+for (const declaration of ["display: table", "table-layout: fixed", "width: 100%"]) {
+  assert.ok(prints(".markdown-body table", declaration), `print fits a table to the page with ${declaration}`);
+}
+for (const selector of [".markdown-body td", ".markdown-body th"]) {
+  assert.ok(prints(selector, "overflow-wrap: anywhere"), `print breaks unbroken text in ${selector}`);
+}
 assert.ok(prints('html[data-theme="dark"]', "--bgColor-default: #ffffff"), "print keeps the dark theme's background");
 assert.ok(prints('html[data-theme="dark"]', "--fgColor-default: #1f2328"), "print keeps the dark theme's text colour");
 

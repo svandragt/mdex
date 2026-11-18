@@ -49,6 +49,8 @@ namespace Mdex {
         public signal void snapshot_requested (string text);
         /** Fired after an export lands on the clipboard: a version went out, so it is worth keeping. */
         public signal void export_done (string text);
+        /** Fired after a PDF is written, so the application can reveal it in the file manager. */
+        public signal void pdf_exported (GLib.File file);
         /** Fired when the user opens the revisions window. */
         public signal void revisions_requested (string text);
         /** Fired when the user takes the offer to replace unsaved edits with the text now on disk. */
@@ -232,6 +234,12 @@ namespace Mdex {
             revisions_action.activate.connect (() => revisions_requested (editor.get_text ()));
             edit_actions.add_action (revisions_action);
             insert_action_group ("edit", edit_actions);
+
+            // Printing needs the native path, so this is built in, not a JavaScript exporter.
+            // It lives in the window's group, so a plugin exporter with the id "pdf" cannot replace it.
+            var pdf_action = new SimpleAction ("export-pdf", null);
+            pdf_action.activate.connect (() => run_pdf_export.begin ());
+            add_action (pdf_action);
 
             Granite.Settings.get_default ().notify["prefers-color-scheme"].connect (update_theme);
             sync_local_theme ();
@@ -574,8 +582,15 @@ namespace Mdex {
 
         /** Builds the export menu from window.mdex.list(). Call after plugins are injected. */
         public async void build_export_menu () {
-            string json = yield preview.list ();
+            var menu = new GLib.Menu ();
+            add_exporters (menu, yield preview.list ());
+            menu.append ("Export to PDF…", "win.export-pdf");
+            export_button.menu_model = menu;
+            export_button.sensitive = true;
+        }
 
+        /** Adds an entry per exporter in json to menu. A list that does not parse adds none. */
+        private void add_exporters (GLib.Menu menu, string json) {
             Json.Node? root = null;
             try {
                 var parser = new Json.Parser ();
@@ -589,7 +604,6 @@ namespace Mdex {
                 return;
             }
 
-            var menu = new GLib.Menu ();
             foreach (unowned Json.Node item in root.get_array ().get_elements ()) {
                 unowned Json.Object obj = item.get_object ();
                 string id = obj.get_string_member ("id");
@@ -606,16 +620,6 @@ namespace Mdex {
                     application.set_accels_for_action ("export." + id, { accel });
                 }
             }
-
-            // Printing needs the native path, so this entry is built in, not a JavaScript exporter.
-            // It lives in the window's group, so a plugin exporter with the id "pdf" cannot replace it.
-            var pdf_action = new SimpleAction ("export-pdf", null);
-            pdf_action.activate.connect (() => run_pdf_export.begin ());
-            add_action (pdf_action);
-            menu.append ("Export to PDF…", "win.export-pdf");
-
-            export_button.menu_model = menu;
-            export_button.sensitive = true;
         }
 
         private string? accel_for_id (string id) {
@@ -655,16 +659,26 @@ namespace Mdex {
                 title = "Export to PDF",
                 initial_name = pdf_name (ticket_name),
             };
-            GLib.File file;
+            GLib.File? file;
             try {
                 file = yield dialog.save (this, null);
             } catch (GLib.Error e) {
                 // User cancelled, or the picker failed — nothing is written.
                 return;
             }
+            if (file == null) {
+                return;
+            }
+            yield save_pdf (file);
+        }
+
+        /** Prints the preview to file as a PDF and says how it went. */
+        public async void save_pdf (GLib.File file) {
             try {
                 yield preview.export_pdf (file);
                 show_toast ("Exported to %s".printf (file.get_basename ()));
+                export_done (editor.get_text ());
+                pdf_exported (file);
             } catch (GLib.Error e) {
                 warning ("export to PDF failed: %s", e.message);
                 show_toast ("Export to PDF failed");

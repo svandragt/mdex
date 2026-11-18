@@ -116,6 +116,7 @@ Options:
                     save_now (text);
                 });
                 window.export_done.connect ((text) => revisions.snapshot (text, "export"));
+                window.pdf_exported.connect ((file) => reveal_file.begin (file));
                 window.revisions_requested.connect ((text) => {
                     var dialog = new RevisionsWindow (window, revisions, text);
                     dialog.restore_requested.connect ((old, label) => {
@@ -443,6 +444,15 @@ Options:
                 return;
             }
             window.show_toast ("Copy saved");
+        }
+
+        /** Opens the folder holding file in the file manager, with the file selected where it can. */
+        private async void reveal_file (GLib.File file) {
+            try {
+                yield new Gtk.FileLauncher (file).open_containing_folder (window, null);
+            } catch (GLib.Error e) {
+                warning ("could not show %s in the file manager: %s", file.get_path (), e.message);
+            }
         }
 
         /** Moves the untitled document to where the user picks, then takes the snapshot they asked for. */

@@ -7,7 +7,8 @@
 // It also checks that a plan which quotes nothing of the ticket draws no bar beside the ticket's paragraphs,
 // since every paragraph would then read as left out. The bars are drawn by the page, so the check loads it.
 //
-// It checks the Export menu ends with Export to PDF…, and the name the save dialog offers for it.
+// It checks the Export menu ends with Export to PDF… even when the exporter list is broken, the name the save dialog
+// offers for it, and that a PDF export snapshots the text like the other exports.
 //
 // It builds a MainWindow, so it needs a display and skips (exit 77) without one.
 
@@ -133,6 +134,36 @@ private async void check_menu (Mdex.MainWindow window) {
     var action = menu.get_item_attribute_value (last, GLib.Menu.ATTRIBUTE_ACTION, GLib.VariantType.STRING);
     check ("the Export menu ends with Export to PDF…", label != null && label.get_string () == "Export to PDF…" && action != null && action.get_string () == "win.export-pdf");
     check ("the PDF entry follows the exporters", last >= 1);
+
+    // A page whose exporter list is not JSON still gets the built-in entry.
+    var preview = preview_of (window);
+    try {
+        yield preview.call_async_javascript_function ("window.mdex.list = () => 'not json'; return 1;", -1, null, null, null, null);
+    } catch (GLib.Error e) {
+        check ("the exporter list is broken: %s".printf (e.message), false);
+        return;
+    }
+    yield window.build_export_menu ();
+    menu = export_menu_of (window);
+    check ("a broken exporter list leaves the PDF entry", menu != null && menu.get_n_items () == 1);
+}
+
+private async void check_save_pdf (Mdex.MainWindow window, string dir) {
+    string? exported = null;
+    GLib.File? saved = null;
+    window.export_done.connect ((text) => exported = text);
+    window.pdf_exported.connect ((file) => saved = file);
+    window.set_text ("# Exported\n");
+    var target = GLib.File.new_for_path (Path.build_filename (dir, "out.pdf"));
+    yield window.save_pdf (target);
+    check ("a PDF export reports the text that went out", exported == "# Exported\n");
+    check ("a PDF export reports the saved file", saved != null && saved.get_path () == target.get_path ());
+
+    exported = null;
+    saved = null;
+    yield window.save_pdf (GLib.File.new_for_path (Path.build_filename (dir, "no-such-dir", "out.pdf")));
+    check ("a failed PDF export reports nothing", exported == null);
+    check ("a failed PDF export reports no file", saved == null);
 }
 
 public static int main (string[] args) {
@@ -154,6 +185,7 @@ public static int main (string[] args) {
     string plan = Path.build_filename (dir, "391.md");
     var window = new Mdex.MainWindow (new Gtk.Application ("com.github.svandragt.mdex.test", GLib.ApplicationFlags.NON_UNIQUE));
     GLib.File? in_new_window = null;
+    check ("the PDF export action exists as soon as the window is built", window.lookup_action ("export-pdf") != null);
     int replaced = 0;
     window.open_requested.connect (() => replaced++);
     window.open_in_new_window_requested.connect ((file) => in_new_window = file);
@@ -188,6 +220,13 @@ public static int main (string[] args) {
         menu_loop.quit ();
     });
     menu_loop.run ();
+
+    var pdf_loop = new GLib.MainLoop ();
+    check_save_pdf.begin (window, dir, (obj, res) => {
+        check_save_pdf.end (res);
+        pdf_loop.quit ();
+    });
+    pdf_loop.run ();
 
     remove_tree (dir);
     return failures == 0 ? 0 : 1;

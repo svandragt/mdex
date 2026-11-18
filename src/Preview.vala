@@ -385,7 +385,8 @@ namespace Mdex {
          */
         public async void export_pdf (GLib.File target) throws GLib.Error {
             var settings = new Gtk.PrintSettings ();
-            settings.set_printer ("Print to File");
+            // GTK names this printer in the user's language, from its own gettext domain.
+            settings.set_printer (GLib.dgettext ("gtk40", "Print to File"));
             settings.set (Gtk.PRINT_SETTINGS_OUTPUT_URI, target.get_uri ());
             settings.set (Gtk.PRINT_SETTINGS_OUTPUT_FILE_FORMAT, "pdf");
             var setup = new Gtk.PageSetup ();
@@ -394,8 +395,9 @@ namespace Mdex {
             var operation = new WebKit.PrintOperation (this) { print_settings = settings, page_setup = setup };
             GLib.Error? failure = null;
             operation.failed.connect ((e) => failure = e);
-            // finished follows failed, so it ends the wait on both outcomes.
-            operation.finished.connect (() => export_pdf.callback ());
+            // finished follows failed, so it ends the wait on both outcomes. WebKit emits both inside print ()
+            // when it cannot find the printer, so resume from an idle source, after the yield below has suspended.
+            operation.finished.connect (() => { GLib.Idle.add (export_pdf.callback); });
             operation.print ();
             yield;
             if (failure != null) {
