@@ -563,6 +563,15 @@ namespace Mdex {
             });
         }
 
+        /** The file name the PDF save dialog offers for a document: its name with the extension swapped for .pdf. */
+        public static string pdf_name (string document) {
+            if (document == "") {
+                return "untitled.pdf";
+            }
+            int dot = document.last_index_of_char ('.');
+            return (dot > 0 ? document.substring (0, dot) : document) + ".pdf";
+        }
+
         /** Builds the export menu from window.mdex.list(). Call after plugins are injected. */
         public async void build_export_menu () {
             string json = yield preview.list ();
@@ -598,6 +607,13 @@ namespace Mdex {
                 }
             }
 
+            // Printing needs the native path, so this entry is built in, not a JavaScript exporter.
+            // It lives in the window's group, so a plugin exporter with the id "pdf" cannot replace it.
+            var pdf_action = new SimpleAction ("export-pdf", null);
+            pdf_action.activate.connect (() => run_pdf_export.begin ());
+            add_action (pdf_action);
+            menu.append ("Export to PDF…", "win.export-pdf");
+
             export_button.menu_model = menu;
             export_button.sensitive = true;
         }
@@ -632,6 +648,27 @@ namespace Mdex {
                     // Dismissed — nothing to publish.
                 }
             });
+        }
+
+        private async void run_pdf_export () {
+            var dialog = new Gtk.FileDialog () {
+                title = "Export to PDF",
+                initial_name = pdf_name (ticket_name),
+            };
+            GLib.File file;
+            try {
+                file = yield dialog.save (this, null);
+            } catch (GLib.Error e) {
+                // User cancelled, or the picker failed — nothing is written.
+                return;
+            }
+            try {
+                yield preview.export_pdf (file);
+                show_toast ("Exported to %s".printf (file.get_basename ()));
+            } catch (GLib.Error e) {
+                warning ("export to PDF failed: %s", e.message);
+                show_toast ("Export to PDF failed");
+            }
         }
 
         private async void run_export (string id, string label) {

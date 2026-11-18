@@ -47,6 +47,8 @@ Export from the header bar menu, or with a shortcut:
 
 The result lands on the clipboard, ready to paste.
 
+To share the preview as a file, choose Export to PDF… in the same menu. The PDF is an A4 copy in light colours, without the comment underlines, coverage tints and margin bars.
+
 ## Revisions
 
 A draft often starts as generated key points and ends as a finished message. mdex keeps snapshots along the way so you can see what changed. Press Ctrl+H or the clock button to open the revisions window, pick any two snapshots (or a snapshot and the current text) and read the unified diff. The Restore button puts the left-hand snapshot back in the editor, after snapshotting what it replaces.
@@ -162,7 +164,7 @@ All markdown parsing happens once, in JavaScript, inside the preview WebView. Re
 
 Publishing shells out to mp rather than speaking Micropub itself. Your token stays in mp's config, and a blog mp can post to is a blog mdex can post to.
 
-The export menu is built at run time by asking the WebView which exporters are registered. That is why a plugin is a first-class format rather than a second-class one.
+The export menu is built at run time by asking the WebView which exporters are registered, followed by the built-in Export to PDF entry, which prints the preview. That is why a plugin is a first-class format rather than a second-class one.
 
 ## Licence
 

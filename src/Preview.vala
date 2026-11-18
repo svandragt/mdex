@@ -379,6 +379,30 @@ namespace Mdex {
             }
         }
 
+        /**
+         * Prints the page to target as an A4 PDF, with no dialog. Throws when the print fails, such as when target's
+         * directory does not exist.
+         */
+        public async void export_pdf (GLib.File target) throws GLib.Error {
+            var settings = new Gtk.PrintSettings ();
+            settings.set_printer ("Print to File");
+            settings.set (Gtk.PRINT_SETTINGS_OUTPUT_URI, target.get_uri ());
+            settings.set (Gtk.PRINT_SETTINGS_OUTPUT_FILE_FORMAT, "pdf");
+            var setup = new Gtk.PageSetup ();
+            setup.set_paper_size (new Gtk.PaperSize (Gtk.PAPER_NAME_A4));
+
+            var operation = new WebKit.PrintOperation (this) { print_settings = settings, page_setup = setup };
+            GLib.Error? failure = null;
+            operation.failed.connect ((e) => failure = e);
+            // finished follows failed, so it ends the wait on both outcomes.
+            operation.finished.connect (() => export_pdf.callback ());
+            operation.print ();
+            yield;
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
         /** Injects a user plugin. A broken plugin must not take the app down. */
         public async void inject_plugin (string js) {
             try {

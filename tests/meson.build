@@ -121,6 +121,16 @@ previewcoverage_test = executable(
 
 test('previewcoverage', previewcoverage_test)
 
+# Builds a Preview and prints it to a file, so it needs a display; the test skips (exit 77) without one.
+previewpdf_test = executable(
+  'test-previewpdf',
+  files('previewpdf.vala') + preview_source + comments_source + coverage_source,
+  mdex_resources,
+  dependencies: dependencies,
+)
+
+test('previewpdf', previewpdf_test)
+
 # The exporters are JavaScript, so this one runs under node when there is one.
 node = find_program('node', required: false)
 if node.found()

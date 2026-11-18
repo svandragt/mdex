@@ -609,3 +609,24 @@ mdex.render("");
 assert.strictEqual(json(root.querySelectorAll("q").map((q) => q.getAttribute("title"))), json(["Quoted from 391.ticket.md", null, "mine", null]));
 
 console.log("ok quote titles");
+
+// The print stylesheet drops the review marks, keeps blocks whole and forces light colours.
+// WebKit applies @media print only when printing, so the preview is unchanged.
+const printBlock = read("shell.html").match(/@media print \{([\s\S]*?)\n\}/);
+assert.ok(printBlock, "shell.html has no @media print block");
+const printRules = [...printBlock[1].replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .map(([, selectors, body]) => [selectors.split(",").map((s) => s.trim()), body]);
+const prints = (selector, declaration) => printRules.some(([selectors, body]) => selectors.includes(selector) && body.includes(declaration));
+for (const selector of [".markdown-body mark.mdex-comment", ".markdown-body mark.mdex-covered", ".markdown-body mark.mdex-gap", '.markdown-body q[cite]:not([cite=""])']) {
+  assert.ok(prints(selector, "background-color: transparent"), `print keeps the tint of ${selector}`);
+}
+assert.ok(prints(".markdown-body mark.mdex-comment", "border-bottom: none"), "print drops the comment underline");
+assert.ok(prints(".markdown-body mark.mdex-badge::after", "display: none"), "print hides the criterion badge");
+assert.ok(prints(".markdown-body .mdex-uncovered::before", "display: none"), "print hides the margin bar");
+for (const selector of [".markdown-body pre", ".markdown-body tr", ".markdown-body img"]) {
+  assert.ok(prints(selector, "break-inside: avoid"), `print splits ${selector} across pages`);
+}
+assert.ok(prints('html[data-theme="dark"]', "--bgColor-default: #ffffff"), "print keeps the dark theme's background");
+assert.ok(prints('html[data-theme="dark"]', "--fgColor-default: #1f2328"), "print keeps the dark theme's text colour");
+
+console.log("ok print styles");

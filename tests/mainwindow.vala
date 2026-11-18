@@ -7,6 +7,8 @@
 // It also checks that a plan which quotes nothing of the ticket draws no bar beside the ticket's paragraphs,
 // since every paragraph would then read as left out. The bars are drawn by the page, so the check loads it.
 //
+// It checks the Export menu ends with Export to PDF…, and the name the save dialog offers for it.
+//
 // It builds a MainWindow, so it needs a display and skips (exit 77) without one.
 
 private int failures = 0;
@@ -40,6 +42,20 @@ private Gtk.Button? button (Gtk.Widget where, string label) {
     }
     for (var child = where.get_first_child (); child != null; child = child.get_next_sibling ()) {
         var found = button (child, label);
+        if (found != null) {
+            return found;
+        }
+    }
+    return null;
+}
+
+private GLib.MenuModel? export_menu_of (Gtk.Widget where) {
+    var b = where as Gtk.MenuButton;
+    if (b != null && b.label == "Export") {
+        return b.menu_model;
+    }
+    for (var child = where.get_first_child (); child != null; child = child.get_next_sibling ()) {
+        var found = export_menu_of (child);
         if (found != null) {
             return found;
         }
@@ -105,6 +121,20 @@ private async void check_bars (Mdex.MainWindow window, string ticket, string pla
     check ("a plan that quotes nothing of the ticket bars nothing", (yield bars (preview, 0)) == 0);
 }
 
+private async void check_menu (Mdex.MainWindow window) {
+    yield window.build_export_menu ();
+    var menu = export_menu_of (window);
+    check ("the window has an Export menu", menu != null);
+    if (menu == null) {
+        return;
+    }
+    int last = menu.get_n_items () - 1;
+    var label = menu.get_item_attribute_value (last, GLib.Menu.ATTRIBUTE_LABEL, GLib.VariantType.STRING);
+    var action = menu.get_item_attribute_value (last, GLib.Menu.ATTRIBUTE_ACTION, GLib.VariantType.STRING);
+    check ("the Export menu ends with Export to PDF…", label != null && label.get_string () == "Export to PDF…" && action != null && action.get_string () == "win.export-pdf");
+    check ("the PDF entry follows the exporters", last >= 1);
+}
+
 public static int main (string[] args) {
     string dir;
     try {
@@ -147,6 +177,17 @@ public static int main (string[] args) {
         loop.quit ();
     });
     loop.run ();
+
+    check ("a document's PDF is named after it", Mdex.MainWindow.pdf_name ("391.ticket.md") == "391.ticket.pdf");
+    check ("a document with no extension keeps its name", Mdex.MainWindow.pdf_name ("notes") == "notes.pdf");
+    check ("the scratch buffer is named untitled", Mdex.MainWindow.pdf_name ("") == "untitled.pdf");
+
+    var menu_loop = new GLib.MainLoop ();
+    check_menu.begin (window, (obj, res) => {
+        check_menu.end (res);
+        menu_loop.quit ();
+    });
+    menu_loop.run ();
 
     remove_tree (dir);
     return failures == 0 ? 0 : 1;

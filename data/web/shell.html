@@ -205,6 +205,61 @@ html, body {
   /* The hover tint is translucent, so it sits on the opaque background as a layer; alone it lets the text underneath show through. */
   background-image: linear-gradient(var(--bgColor-neutral-muted, #818b981f), var(--bgColor-neutral-muted, #818b981f));
 }
+
+/*
+ * The PDF export prints this page. WebKit applies these rules only while printing, so the preview is unchanged.
+ * The marks are review aids for the author, so the PDF keeps the text and drops them. The colours are the light
+ * theme's, because the dark theme's would print as a black page; the variables are the ones github-markdown.css reads.
+ */
+@media print {
+  .markdown-body mark.mdex-comment {
+    border-bottom: none;
+  }
+
+  .markdown-body mark.mdex-comment,
+  .markdown-body mark.mdex-covered,
+  .markdown-body mark.mdex-gap,
+  .markdown-body q[cite]:not([cite=""]) {
+    background-color: transparent;
+    color: inherit;
+  }
+
+  .markdown-body mark.mdex-badge::after,
+  .markdown-body .mdex-uncovered::before {
+    display: none;
+  }
+
+  .markdown-body pre,
+  .markdown-body tr,
+  .markdown-body img {
+    break-inside: avoid;
+  }
+
+  html[data-theme="dark"],
+  html[data-theme="dark"] .markdown-body {
+    color-scheme: light;
+    --focus-outlineColor: #0969da;
+    --fgColor-default: #1f2328;
+    --fgColor-muted: #59636e;
+    --fgColor-accent: #0969da;
+    --fgColor-success: #1a7f37;
+    --fgColor-attention: #9a6700;
+    --fgColor-danger: #d1242f;
+    --fgColor-done: #8250df;
+    --bgColor-default: #ffffff;
+    --bgColor-muted: #f6f8fa;
+    --bgColor-neutral-muted: #818b981f;
+    --bgColor-attention-muted: #fff8c5;
+    --borderColor-default: #d1d9e0;
+    --borderColor-muted: #d1d9e0b3;
+    --borderColor-neutral-muted: #d1d9e0b3;
+    --borderColor-accent-emphasis: #0969da;
+    --borderColor-success-emphasis: #1a7f37;
+    --borderColor-attention-emphasis: #9a6700;
+    --borderColor-danger-emphasis: #cf222e;
+    --borderColor-done-emphasis: #8250df;
+  }
+}
 </style>
 </head>
 <body>
