@@ -235,6 +235,21 @@ html, body {
     break-inside: avoid;
   }
 
+  #mdex-comment {
+    display: none;
+  }
+
+  /* A code line wider than the page would be cut off, so the PDF wraps it. */
+  .markdown-body pre {
+    overflow: visible;
+  }
+
+  .markdown-body pre,
+  .markdown-body pre > code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
   html[data-theme="dark"],
   html[data-theme="dark"] .markdown-body {
     color-scheme: light;

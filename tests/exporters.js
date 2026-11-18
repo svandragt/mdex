@@ -626,6 +626,12 @@ assert.ok(prints(".markdown-body .mdex-uncovered::before", "display: none"), "pr
 for (const selector of [".markdown-body pre", ".markdown-body tr", ".markdown-body img"]) {
   assert.ok(prints(selector, "break-inside: avoid"), `print splits ${selector} across pages`);
 }
+assert.ok(prints("#mdex-comment", "display: none"), "print hides the floating Comment button");
+for (const selector of [".markdown-body pre", ".markdown-body pre > code"]) {
+  assert.ok(prints(selector, "white-space: pre-wrap"), `print wraps long lines in ${selector}`);
+  assert.ok(prints(selector, "overflow-wrap: anywhere"), `print breaks unbroken text in ${selector}`);
+}
+assert.ok(prints(".markdown-body pre", "overflow: visible"), "print does not clip code at the page edge");
 assert.ok(prints('html[data-theme="dark"]', "--bgColor-default: #ffffff"), "print keeps the dark theme's background");
 assert.ok(prints('html[data-theme="dark"]', "--fgColor-default: #1f2328"), "print keeps the dark theme's text colour");
 
