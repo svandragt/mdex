@@ -47,6 +47,8 @@ Export from the header bar menu, or with a shortcut:
 
 The result lands on the clipboard, ready to paste.
 
+To export part of the document, select it first, in the editor or in the preview. A selection in the preview exports every paragraph, list or table it touches, whole. This applies to Export to PDF… too.
+
 To share the preview as a file, choose Export to PDF… in the same menu. The PDF is an A4 copy in light colours, without the comment underlines, coverage tints and margin bars. After saving, mdex opens the folder with the PDF selected.
 
 ## Revisions

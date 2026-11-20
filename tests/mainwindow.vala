@@ -164,6 +164,31 @@ private async void check_save_pdf (Mdex.MainWindow window, string dir) {
     yield window.save_pdf (GLib.File.new_for_path (Path.build_filename (dir, "no-such-dir", "out.pdf")));
     check ("a failed PDF export reports nothing", exported == null);
     check ("a failed PDF export reports no file", saved == null);
+
+    window.set_text ("# Exported\n\nKept para.\n");
+    yield window.save_pdf (target, "Kept para.");
+    string? pdftotext = GLib.Environment.find_program_in_path ("pdftotext");
+    if (pdftotext != null) {
+        string text = "";
+        try {
+            GLib.Process.spawn_sync (null, { pdftotext, target.get_path (), "-" }, null, 0, null, out text);
+        } catch (GLib.SpawnError e) {
+            text = "";
+        }
+        check ("a PDF of a selection holds only the selection", text.contains ("Kept para.") && !text.contains ("Exported"));
+    } else {
+        print ("skip a PDF of a selection holds only the selection: no pdftotext\n");
+    }
+    var preview = preview_of (window);
+    string shown = "";
+    try {
+        var result = yield preview.call_async_javascript_function (
+            "return document.getElementById('output').textContent;", -1, null, null, null, null);
+        shown = result.to_string ();
+    } catch (GLib.Error e) {
+        shown = "";
+    }
+    check ("the preview shows the whole document again after a selection's PDF", shown.contains ("Exported"));
 }
 
 public static int main (string[] args) {

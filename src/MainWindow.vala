@@ -655,6 +655,8 @@ namespace Mdex {
         }
 
         private async void run_pdf_export () {
+            // Read before the dialog opens, so the selection is the one the user made.
+            string? selection = yield selected_markdown ();
             var dialog = new Gtk.FileDialog () {
                 title = "Export to PDF",
                 initial_name = pdf_name (ticket_name),
@@ -669,13 +671,27 @@ namespace Mdex {
             if (file == null) {
                 return;
             }
-            yield save_pdf (file);
+            yield save_pdf (file, selection);
         }
 
-        /** Prints the preview to file as a PDF and says how it went. */
-        public async void save_pdf (GLib.File file) {
+        /** The editor's selection, else the Markdown of the blocks selected in the preview, else null. */
+        private async string? selected_markdown () {
+            return editor.get_selected_text () ?? yield preview.selected_source ();
+        }
+
+        /** Prints the preview to file as a PDF and says how it went. With a selection, prints only that Markdown. */
+        public async void save_pdf (GLib.File file, string? selection = null) {
             try {
-                yield preview.export_pdf (file);
+                if (selection != null) {
+                    yield preview.render (selection);
+                }
+                try {
+                    yield preview.export_pdf (file);
+                } finally {
+                    if (selection != null) {
+                        yield preview.render (editor.get_text ());
+                    }
+                }
                 show_toast ("Exported to %s".printf (file.get_basename ()));
                 export_done (editor.get_text ());
                 pdf_exported (file);
@@ -687,7 +703,7 @@ namespace Mdex {
 
         private async void run_export (string id, string label) {
             try {
-                string? selection = editor.get_selected_text ();
+                string? selection = yield selected_markdown ();
                 string json = yield preview.run (id, selection ?? editor.get_text ());
 
                 Json.Node? root = null;

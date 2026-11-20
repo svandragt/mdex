@@ -138,3 +138,13 @@ node = find_program('node', required: false)
 if node.found()
   test('exporters', node, args: [files('exporters.js')])
 endif
+
+# Builds a Preview and selects text in it, so it needs a display; the test skips (exit 77) without one.
+previewselection_test = executable(
+  'test-previewselection',
+  files('previewselection.vala') + preview_source + comments_source + coverage_source,
+  mdex_resources,
+  dependencies: dependencies,
+)
+
+test('previewselection', previewselection_test)

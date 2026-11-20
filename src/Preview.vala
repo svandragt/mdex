@@ -345,6 +345,19 @@ namespace Mdex {
             }
         }
 
+        /** Returns the Markdown of every block the page's selection touches, or null when nothing is selected. */
+        public async string? selected_source () {
+            try {
+                var result = yield call_async_javascript_function (
+                    "return window.mdex.selectedSource();", -1, null, null, null, null);
+                string md = result.to_string ();
+                return md != "" ? md : null;
+            } catch (GLib.Error e) {
+                warning ("selectedSource failed: %s", e.message);
+                return null;
+            }
+        }
+
         /** Returns the exporter list as a JSON string, or "[]" on error. */
         public async string list () {
             try {

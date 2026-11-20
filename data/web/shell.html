@@ -304,8 +304,41 @@ html, body {
   const commentButton = document.getElementById("mdex-comment");
   const exporters = [];
   const exportersById = {};
+  // The rendered Markdown as marked read it (line endings normalised); data-mdex-src offsets index into it.
+  let source = "";
 
   marked.setOptions({ gfm: true, breaks: false });
+
+  // Renders md one top-level token at a time and gives the element each token opens the
+  // source range ("start,end") it came from. A block token renders to one element; raw HTML
+  // that is several elements tags only its first.
+  function renderBlocks(md) {
+    const tokens = marked.lexer(md);
+    let offset = 0;
+    const html = tokens.map(function (token) {
+      const start = offset;
+      offset += token.raw.length;
+      const one = [token];
+      one.links = tokens.links;
+      return marked.parser(one).replace(/^\s*<([a-zA-Z][\w-]*)/, '<$1 data-mdex-src="' + start + "," + offset + '"');
+    }).join("");
+    source = tokens.map(function (t) { return t.raw; }).join("");
+    return html;
+  }
+
+  // Whether the selection range covers some of block: some of its text, or all of it (an image, a rule).
+  function selectionTouches(range, block) {
+    if (!range.intersectsNode(block)) return false;
+    const whole = document.createRange();
+    whole.selectNodeContents(block);
+    const startsBefore = range.compareBoundaryPoints(Range.START_TO_START, whole) <= 0;
+    const endsAfter = range.compareBoundaryPoints(Range.END_TO_END, whole) >= 0;
+    if (startsBefore && endsAfter) return true;
+    const part = range.cloneRange();
+    if (startsBefore) part.setStart(whole.startContainer, whole.startOffset);
+    if (endsAfter) part.setEnd(whole.endContainer, whole.endOffset);
+    return part.toString().trim() !== "";
+  }
 
   // marked's token `text` is HTML-escaped (James&#39;s). Exporters emit plain
   // text, not HTML, so they undo it at the point they read a token.
@@ -548,7 +581,7 @@ html, body {
     unescape: unescapeEntities,
 
     render(md) {
-      output.innerHTML = marked.parse(md || "");
+      output.innerHTML = renderBlocks(md || "");
       output.querySelectorAll("q").forEach(function (q) {
         if (q.getAttribute("cite") && !q.hasAttribute("title")) q.setAttribute("title", "Quoted from " + q.getAttribute("cite"));
       });
@@ -656,6 +689,19 @@ html, body {
       const r = range.getBoundingClientRect();
       window.scrollBy(0, r.top + r.height / 2 - window.innerHeight / 2);
       return true;
+    },
+
+    // Returns the Markdown source of every top-level block the selection touches, from the
+    // start of the first to the end of the last, or "" when nothing in the output is selected.
+    selectedSource() {
+      const selection = window.getSelection();
+      if (!selection.rangeCount || selection.isCollapsed) return "";
+      const range = selection.getRangeAt(0);
+      const ranges = Array.from(output.querySelectorAll(":scope > [data-mdex-src]"))
+        .filter(function (block) { return selectionTouches(range, block); })
+        .map(function (block) { return block.dataset.mdexSrc.split(",").map(Number); });
+      if (!ranges.length) return "";
+      return source.slice(ranges[0][0], ranges[ranges.length - 1][1]).replace(/\s+$/, "");
     },
 
     list() {
