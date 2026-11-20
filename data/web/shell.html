@@ -306,12 +306,14 @@ html, body {
   const exportersById = {};
   // The rendered Markdown as marked read it (line endings normalised); data-mdex-src offsets index into it.
   let source = "";
+  // The rendered Markdown's link reference definitions, which marked keeps out of its tokens.
+  let links = {};
 
   marked.setOptions({ gfm: true, breaks: false });
 
-  // Renders md one top-level token at a time and gives the element each token opens the
-  // source range ("start,end") it came from. A block token renders to one element; raw HTML
-  // that is several elements tags only its first.
+  // Renders md one top-level token at a time and gives the first element each token renders the
+  // source range ("start,end") it came from. Raw HTML can render several elements; selectedSource
+  // counts an untagged one as part of the tagged one before it.
   function renderBlocks(md) {
     const tokens = marked.lexer(md);
     let offset = 0;
@@ -320,9 +322,10 @@ html, body {
       offset += token.raw.length;
       const one = [token];
       one.links = tokens.links;
-      return marked.parser(one).replace(/^\s*<([a-zA-Z][\w-]*)/, '<$1 data-mdex-src="' + start + "," + offset + '"');
+      return marked.parser(one).replace(/<([a-zA-Z][\w-]*)/, '<$1 data-mdex-src="' + start + "," + offset + '"');
     }).join("");
     source = tokens.map(function (t) { return t.raw; }).join("");
+    links = tokens.links;
     return html;
   }
 
@@ -337,7 +340,7 @@ html, body {
     const part = range.cloneRange();
     if (startsBefore) part.setStart(whole.startContainer, whole.startOffset);
     if (endsAfter) part.setEnd(whole.endContainer, whole.endOffset);
-    return part.toString().trim() !== "";
+    return part.toString().trim() !== "" || !!part.cloneContents().querySelector("img");
   }
 
   // marked's token `text` is HTML-escaped (James&#39;s). Exporters emit plain
@@ -697,11 +700,22 @@ html, body {
       const selection = window.getSelection();
       if (!selection.rangeCount || selection.isCollapsed) return "";
       const range = selection.getRangeAt(0);
-      const ranges = Array.from(output.querySelectorAll(":scope > [data-mdex-src]"))
-        .filter(function (block) { return selectionTouches(range, block); })
-        .map(function (block) { return block.dataset.mdexSrc.split(",").map(Number); });
+      let src = null;
+      const ranges = [];
+      Array.from(output.children).forEach(function (block) {
+        if (block.dataset.mdexSrc) src = block.dataset.mdexSrc.split(",").map(Number);
+        if (src && selectionTouches(range, block)) ranges.push(src);
+      });
       if (!ranges.length) return "";
-      return source.slice(ranges[0][0], ranges[ranges.length - 1][1]).replace(/\s+$/, "");
+      const md = source.slice(ranges[0][0], ranges[ranges.length - 1][1]).replace(/\s+$/, "");
+      // Labels match case-insensitively, and marked keys them in lower case.
+      const lower = md.toLowerCase();
+      const defs = Object.keys(links).filter(function (key) { return lower.includes("[" + key + "]"); })
+        .map(function (key) {
+          const link = links[key];
+          return "[" + key + "]: " + link.href + (link.title ? ' "' + link.title.replace(/"/g, '\\"') + '"' : "");
+        });
+      return defs.length ? md + "\n\n" + defs.join("\n") : md;
     },
 
     list() {

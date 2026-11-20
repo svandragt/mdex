@@ -7,6 +7,8 @@ namespace Mdex {
         private bool loaded = false;
         private bool render_in_flight = false;
         private string? pending_md = null;
+        /** While true, queued renders wait, so a page printed from other Markdown stays as it is. */
+        public bool paused = false;
         private uint debounce_id = 0;
 
         /** The page asks to comment on this selection of the rendered text, which is this occurrence of the quote in it. */
@@ -174,7 +176,7 @@ namespace Mdex {
         }
 
         private async void do_render () {
-            if (!loaded || render_in_flight || pending_md == null) {
+            if (!loaded || paused || render_in_flight || pending_md == null) {
                 return;
             }
             string md = pending_md;

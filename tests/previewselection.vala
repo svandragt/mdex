@@ -38,6 +38,14 @@ private async void select_between (Mdex.Preview preview, string from, string to)
     }
 }
 
+private async void run_js (Mdex.Preview preview, string js) {
+    try {
+        yield preview.call_async_javascript_function (js, -1, null, null, null, null);
+    } catch (GLib.Error e) {
+        check ("the script runs: %s".printf (e.message), false);
+    }
+}
+
 private async void clear_selection (Mdex.Preview preview) {
     try {
         yield preview.call_async_javascript_function (
@@ -62,12 +70,39 @@ private async void check_page (Mdex.Preview preview) {
     yield select_between (preview, "bold", "on");
     string? two = yield preview.selected_source ();
     check ("a selection over two blocks gives both blocks' Markdown, got %s".printf (two ?? "null"),
-        two == "First **bold** para.\n\n- one\n- two [link][x]");
+        two == "First **bold** para.\n\n- one\n- two [link][x]\n\n[x]: https://example.com");
 
     yield select_between (preview, "irs", "irs");
     string? part = yield preview.selected_source ();
     check ("part of one paragraph gives the whole paragraph, got %s".printf (part ?? "null"),
         part == "First **bold** para.");
+
+    yield select_between (preview, "link", "link");
+    string? linked = yield preview.selected_source ();
+    check ("a selection keeps the definitions of its reference links, got %s".printf (linked ?? "null"),
+        linked == "- one\n- two [link][x]\n\n[x]: https://example.com");
+
+    yield preview.render ("Intro.\n\n<div>a</div>\n<div>b</div>\n\n<!-- note --><p>c</p>\n");
+    yield select_between (preview, "b", "b");
+    string? html = yield preview.selected_source ();
+    check ("a selection in the second element of raw HTML gives that HTML, got %s".printf (html ?? "null"),
+        html == "<div>a</div>\n<div>b</div>");
+    yield select_between (preview, "c", "c");
+    string? commented = yield preview.selected_source ();
+    check ("raw HTML that opens with a comment maps to its source, got %s".printf (commented ?? "null"),
+        commented == "<!-- note --><p>c</p>");
+
+    yield preview.render ("Before.\n\n![logo](a.png) caption\n");
+    yield run_js (preview, """
+        const range = document.createRange();
+        range.setStart(document.getElementById("output").querySelector("p").firstChild, 0);
+        range.setEndAfter(document.querySelector("img"));
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+    """);
+    string? image = yield preview.selected_source ();
+    check ("a selection that ends after an image includes the image's paragraph, got %s".printf (image ?? "null"),
+        image == "Before.\n\n![logo](a.png) caption");
 
     yield clear_selection (preview);
     string? cleared = yield preview.selected_source ();

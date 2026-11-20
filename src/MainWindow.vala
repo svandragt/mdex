@@ -7,6 +7,7 @@ namespace Mdex {
     public class MainWindow : Gtk.ApplicationWindow {
         public Editor editor;
         public Preview preview;
+        private bool preview_focused_last = false;
 
         private Gtk.MenuButton export_button;
         private Gtk.Label subtitle_label;
@@ -195,7 +196,15 @@ namespace Mdex {
                 comments_pane.select (id);
             });
             // A render replaces the page content and with it the marks.
-            preview.rendered.connect (() => refresh_marks.begin ());
+            // A paused preview shows only an exported selection, where most marks would read as missing.
+            preview.rendered.connect (() => { if (!preview.paused) refresh_marks.begin (); });
+            // Each pane keeps its selection when it loses focus, so the one focused last says which an export takes.
+            var editor_focus = new Gtk.EventControllerFocus ();
+            editor_focus.enter.connect (() => preview_focused_last = false);
+            editor.view.add_controller (editor_focus);
+            var preview_focus = new Gtk.EventControllerFocus ();
+            preview_focus.enter.connect (() => preview_focused_last = true);
+            preview.add_controller (preview_focus);
             comments_pane.changed.connect (() => refresh_comments.begin ());
             criteria_pane.quote_activated.connect ((quote) => preview.reveal_quote.begin (quote, 1, true));
             criteria_pane.plan_requested.connect (() => {
@@ -674,21 +683,26 @@ namespace Mdex {
             yield save_pdf (file, selection);
         }
 
-        /** The editor's selection, else the Markdown of the blocks selected in the preview, else null. */
-        private async string? selected_markdown () {
-            return editor.get_selected_text () ?? yield preview.selected_source ();
+        /** The selection in the pane focused last (for the preview, the Markdown of the blocks it touches), or null. */
+        public async string? selected_markdown () {
+            if (preview_focused_last) {
+                return yield preview.selected_source ();
+            }
+            return editor.get_selected_text ();
         }
 
         /** Prints the preview to file as a PDF and says how it went. With a selection, prints only that Markdown. */
         public async void save_pdf (GLib.File file, string? selection = null) {
             try {
                 if (selection != null) {
+                    preview.paused = true;
                     yield preview.render (selection);
                 }
                 try {
                     yield preview.export_pdf (file);
                 } finally {
                     if (selection != null) {
+                        preview.paused = false;
                         yield preview.render (editor.get_text ());
                     }
                 }

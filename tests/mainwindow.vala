@@ -72,6 +72,14 @@ private Mdex.Preview? preview_of (Gtk.Widget where) {
     return preview;
 }
 
+private Mdex.Editor? editor_of (Gtk.Widget where) {
+    var editor = where as Mdex.Editor;
+    for (var child = where.get_first_child (); editor == null && child != null; child = child.get_next_sibling ()) {
+        editor = editor_of (child);
+    }
+    return editor;
+}
+
 private async void wait_ms (uint ms) {
     GLib.Timeout.add (ms, () => {
         wait_ms.callback ();
@@ -191,6 +199,63 @@ private async void check_save_pdf (Mdex.MainWindow window, string dir) {
     check ("the preview shows the whole document again after a selection's PDF", shown.contains ("Exported"));
 }
 
+// The pane that last had focus decides which selection an export takes, since each pane keeps its selection when it loses focus.
+private async void check_selection_source (Mdex.MainWindow window) {
+    var editor = editor_of (window);
+    var preview = preview_of (window);
+    window.set_text ("Alpha para.\n\nBeta para.\n");
+    yield wait_ms (400);
+    // Selecting in the preview takes the PRIMARY clipboard, and GTK then clears the editor's selection,
+    // so the editor is selected second, as a user would leave the panes.
+    try {
+        yield preview.call_async_javascript_function ("""
+            const p = document.getElementById("output").querySelectorAll("p")[1];
+            window.getSelection().selectAllChildren(p);
+        """, -1, null, null, null, null);
+    } catch (GLib.Error e) {
+        check ("the preview selection is made: %s".printf (e.message), false);
+    }
+    Gtk.TextIter start, end;
+    editor.buffer.get_iter_at_offset (out start, 0);
+    editor.buffer.get_iter_at_offset (out end, 5);
+    editor.buffer.select_range (start, end);
+
+    editor.view.grab_focus ();
+    yield wait_ms (50);
+    string? from_editor = yield window.selected_markdown ();
+    check ("with the editor focused last, its selection is exported, got %s".printf (from_editor ?? "null"), from_editor == "Alpha");
+
+    preview.grab_focus ();
+    yield wait_ms (50);
+    string? from_preview = yield window.selected_markdown ();
+    check ("with the preview focused last, its selection is exported, got %s".printf (from_preview ?? "null"), from_preview == "Beta para.");
+
+    editor.view.grab_focus ();
+    editor.buffer.select_range (start, start);
+    yield wait_ms (50);
+    string? none = yield window.selected_markdown ();
+    check ("with the editor focused last and nothing selected there, the whole document is exported", none == null);
+}
+
+// While renders are paused, a queued render leaves the page as it is.
+private async void check_paused (Mdex.MainWindow window) {
+    var preview = preview_of (window);
+    yield preview.render ("Shown.\n");
+    preview.paused = true;
+    preview.queue_render ("Queued.\n");
+    yield wait_ms (400);
+    string shown = "";
+    try {
+        var result = yield preview.call_async_javascript_function (
+            "return document.getElementById('output').textContent;", -1, null, null, null, null);
+        shown = result.to_string ();
+    } catch (GLib.Error e) {
+        shown = "";
+    }
+    preview.paused = false;
+    check ("a paused preview ignores a queued render", shown.contains ("Shown."));
+}
+
 public static int main (string[] args) {
     string dir;
     try {
@@ -252,6 +317,16 @@ public static int main (string[] args) {
         pdf_loop.quit ();
     });
     pdf_loop.run ();
+
+    var selection_loop = new GLib.MainLoop ();
+    check_selection_source.begin (window, (obj, res) => {
+        check_selection_source.end (res);
+        check_paused.begin (window, (obj2, res2) => {
+            check_paused.end (res2);
+            selection_loop.quit ();
+        });
+    });
+    selection_loop.run ();
 
     remove_tree (dir);
     return failures == 0 ? 0 : 1;
