@@ -35,6 +35,8 @@ A file opened from the command line, or brought forward by a second launch, star
 
 With no input, mdex reopens the document you had last time, or a scratch buffer if there wasn't one. Everything autosaves a second after you stop typing — to the file you opened, or to `~/.cache/mdex/scratch.md` when there isn't one, so an unnamed session survives a restart. Every launch is a separate instance, so run `mdex` twice to work on two documents side by side. A document that is already open in a window opens only there: opening it again from the command line, Ctrl+O or New file brings that window to the front.
 
+When you start mdex from a herdr pane, the window title ends with that pane's workspace, as `notes.md — 13 · release notes`, so you can tell the windows of different sessions apart. Elsewhere the title ends with `Mdex`. To find the windows with a file that you opened from the current pane, run `mdex --raise`. Each one comes forward or, where the desktop does not allow that, asks for your attention. It prints `mdex: no windows for this pane` and exits with status 1 when there are none, and prints `mdex: --raise works only in a herdr pane` when you run it outside herdr.
+
 The preview shows what a document says but does not run it: scripts and styles inside a Markdown file are ignored, and audio, video and embedded frames do not load. A link opens in your browser or mail program only when it starts with `http:`, `https:` or `mailto:`.
 
 Export from the header bar menu, or with a shortcut:

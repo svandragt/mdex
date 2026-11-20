@@ -11,6 +11,7 @@ namespace Mdex {
     public class DocClaim : Object {
         private const string PATH = "/com/github/svandragt/mdex/Doc";
         private const string INTERFACE = "com.github.svandragt.mdex.Doc";
+        private const string NAME_PREFIX = "com.github.svandragt.mdex.Doc_";
         private const int TIMEOUT_MS = 2000;
 
         private GLib.DBusConnection? connection = null;
@@ -22,7 +23,14 @@ namespace Mdex {
 
         /** The bus name for a document: the path is hashed, as it can hold characters a name may not. */
         public static string bus_name (string path) {
-            return "com.github.svandragt.mdex.Doc_" + GLib.Checksum.compute_for_string (GLib.ChecksumType.MD5, path);
+            return NAME_PREFIX + GLib.Checksum.compute_for_string (GLib.ChecksumType.MD5, path);
+        }
+
+        /** The herdr pane this window was launched from, empty outside herdr, so `mdex --raise` can find a pane's windows. */
+        public string pane { get; private set; }
+
+        construct {
+            pane = GLib.Environment.get_variable ("HERDR_PANE_ID") ?? "";
         }
 
         /** Called over D-Bus by the instance that was asked to open this document. */
@@ -65,11 +73,7 @@ namespace Mdex {
          */
         public static bool present_owner (string path, string token) {
             try {
-                var bus = Bus.get_sync (BusType.SESSION);
-                bus.call_sync (
-                    bus_name (path), PATH, INTERFACE, "Present", new Variant ("(s)", token),
-                    null, DBusCallFlags.NO_AUTO_START, TIMEOUT_MS
-                );
+                call_present (Bus.get_sync (BusType.SESSION), bus_name (path), token);
                 return true;
             } catch (GLib.Error e) {
                 if (!e.matches (GLib.DBusError.quark (), GLib.DBusError.SERVICE_UNKNOWN)
@@ -78,6 +82,48 @@ namespace Mdex {
                 }
                 return false;
             }
+        }
+
+        /**
+         * Asks every window launched from pane to come forward and returns how many did. A window from before
+         * panes were recorded has no pane property, and a name can vanish between listing and asking: both are skipped.
+         */
+        public static int raise_pane (string pane, string token) {
+            int raised = 0;
+            if (pane == "") {
+                return raised;
+            }
+            try {
+                var bus = Bus.get_sync (BusType.SESSION);
+                var names = bus.call_sync (
+                    "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ListNames", null,
+                    new VariantType ("(as)"), DBusCallFlags.NONE, TIMEOUT_MS
+                ).get_child_value (0).get_strv ();
+                foreach (string name in names) {
+                    if (!name.has_prefix (NAME_PREFIX)) {
+                        continue;
+                    }
+                    try {
+                        var theirs = bus.call_sync (
+                            name, PATH, "org.freedesktop.DBus.Properties", "Get", new Variant ("(ss)", INTERFACE, "Pane"),
+                            new VariantType ("(v)"), DBusCallFlags.NO_AUTO_START, TIMEOUT_MS
+                        ).get_child_value (0).get_variant ();
+                        if (theirs.is_of_type (VariantType.STRING) && theirs.get_string () == pane) {
+                            call_present (bus, name, token);
+                            raised++;
+                        }
+                    } catch (GLib.Error e) {
+                        continue;
+                    }
+                }
+            } catch (GLib.Error e) {
+                warning ("cannot list the windows on the session bus: %s", e.message);
+            }
+            return raised;
+        }
+
+        private static void call_present (GLib.DBusConnection bus, string name, string token) throws GLib.Error {
+            bus.call_sync (name, PATH, INTERFACE, "Present", new Variant ("(s)", token), null, DBusCallFlags.NO_AUTO_START, TIMEOUT_MS);
         }
     }
 }

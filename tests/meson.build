@@ -27,7 +27,7 @@ reloadbanner_test = executable(
 test('reloadbanner', reloadbanner_test)
 
 # DocClaim.bus_name is a static string function too, so it compiles in on its
-# own; the D-Bus half needs a session bus and a second window, so it has no test.
+# own. The raise half claims names on the session bus, so it skips (exit 77) without one.
 claim_test = executable(
   'test-docclaim',
   files('docclaim.vala') + claim_source,
@@ -148,3 +148,12 @@ previewselection_test = executable(
 )
 
 test('previewselection', previewselection_test)
+
+# Herdr's JSON parsers are static string functions, so the test compiles them in and needs no herdr.
+herdr_test = executable(
+  'test-herdr',
+  files('herdr.vala') + herdr_source,
+  dependencies: dependencies,
+)
+
+test('herdr', herdr_test)

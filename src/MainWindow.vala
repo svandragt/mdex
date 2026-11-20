@@ -8,6 +8,7 @@ namespace Mdex {
         public Editor editor;
         public Preview preview;
         private bool preview_focused_last = false;
+        private string session = "Mdex";
 
         private Gtk.MenuButton export_button;
         private Gtk.Label subtitle_label;
@@ -287,7 +288,17 @@ namespace Mdex {
 
         public void set_subtitle (string text) {
             subtitle_label.label = text;
-            title = text + " — Mdex";
+            refresh_title ();
+        }
+
+        /** Names the session this window belongs to, so its title tells it apart from other windows' in a window list. */
+        public void set_session (string name) {
+            session = name;
+            refresh_title ();
+        }
+
+        private void refresh_title () {
+            title = subtitle_label.label + " — " + session;
         }
 
         public void show_toast (string title) {

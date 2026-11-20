@@ -27,6 +27,7 @@ Options:
   -h, --help      show this help
   --comments-path FILE
                   print where FILE's review comments are kept, then exit
+  --raise         in a herdr pane, bring forward the windows opened from it, then exit
 
 """;
 
@@ -57,6 +58,21 @@ Options:
                 return 0;
             }
 
+            string token = cmdline.getenv ("XDG_ACTIVATION_TOKEN") ?? cmdline.getenv ("DESKTOP_STARTUP_ID") ?? "";
+            string pane = cmdline.getenv ("HERDR_PANE_ID") ?? "";
+
+            if (args.length > 1 && args[1] == "--raise") {
+                if (pane == "") {
+                    cmdline.printerr ("mdex: --raise works only in a herdr pane\n");
+                    return 1;
+                }
+                if (DocClaim.raise_pane (pane, token) > 0) {
+                    return 0;
+                }
+                cmdline.printerr ("mdex: no windows for this pane\n");
+                return 1;
+            }
+
             // Decided before the window exists, so a launch that only forwards the file (or the resumed document) never builds one.
             GLib.File? wanted = null;
             bool have_piped = false;
@@ -78,11 +94,8 @@ Options:
                     }
                 }
             }
-            if (wanted != null) {
-                string token = cmdline.getenv ("XDG_ACTIVATION_TOKEN") ?? cmdline.getenv ("DESKTOP_STARTUP_ID") ?? "";
-                if (open_elsewhere (wanted, token)) {
-                    return 0;
-                }
+            if (wanted != null && open_elsewhere (wanted, token)) {
+                return 0;
             }
 
             if (window == null) {
@@ -134,6 +147,13 @@ Options:
                     }
                     window.editor.lock_until_click ();
                     window.present ();
+                });
+                // Never waited on: the document opens with the plain title, and the session name follows if herdr answers in time.
+                Herdr.session_name.begin (pane, (obj, res) => {
+                    string? name = Herdr.session_name.end (res);
+                    if (name != null) {
+                        window.set_session (name);
+                    }
                 });
                 // Autosave is debounced, so an edit made just before closing is still pending.
                 window.close_request.connect (() => {

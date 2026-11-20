@@ -10,6 +10,9 @@
 // It checks the Export menu ends with Export to PDF… even when the exporter list is broken, the name the save dialog
 // offers for it, and that a PDF export snapshots the text like the other exports.
 //
+// It checks the window title ends with the session name once one is set, and that opening another
+// document changes only the file name part.
+//
 // It builds a MainWindow, so it needs a display and skips (exit 77) without one.
 
 private int failures = 0;
@@ -284,6 +287,14 @@ public static int main (string[] args) {
     var window = new Mdex.MainWindow (new Gtk.Application ("com.github.svandragt.mdex.test", GLib.ApplicationFlags.NON_UNIQUE));
     GLib.File? in_new_window = null;
     check ("the PDF export action exists as soon as the window is built", window.lookup_action ("export-pdf") != null);
+
+    window.set_subtitle ("notes.md");
+    check ("the title ends with Mdex until a session name is set", window.title == "notes.md — Mdex");
+    window.set_session ("13 · 42 release notes");
+    check ("the title ends with the session name once it is set", window.title == "notes.md — 13 · 42 release notes");
+    window.set_subtitle ("other.md");
+    check ("another document keeps the session name in the title", window.title == "other.md — 13 · 42 release notes");
+
     int replaced = 0;
     window.open_requested.connect (() => replaced++);
     window.open_in_new_window_requested.connect ((file) => in_new_window = file);
