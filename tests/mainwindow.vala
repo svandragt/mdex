@@ -233,8 +233,16 @@ private async void check_selection_source (Mdex.MainWindow window) {
     editor.view.grab_focus ();
     editor.buffer.select_range (start, start);
     yield wait_ms (50);
+    string? other = yield window.selected_markdown ();
+    check ("with nothing selected in the focused pane, the other pane's selection is exported, got %s".printf (other ?? "null"), other == "Beta para.");
+
+    try {
+        yield preview.call_async_javascript_function ("window.getSelection().removeAllRanges();", -1, null, null, null, null);
+    } catch (GLib.Error e) {
+        check ("the preview selection is cleared: %s".printf (e.message), false);
+    }
     string? none = yield window.selected_markdown ();
-    check ("with the editor focused last and nothing selected there, the whole document is exported", none == null);
+    check ("with nothing selected in either pane, the whole document is exported", none == null);
 }
 
 // While renders are paused, a queued render leaves the page as it is.

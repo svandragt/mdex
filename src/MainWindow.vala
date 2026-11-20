@@ -196,8 +196,7 @@ namespace Mdex {
                 comments_pane.select (id);
             });
             // A render replaces the page content and with it the marks.
-            // A paused preview shows only an exported selection, where most marks would read as missing.
-            preview.rendered.connect (() => { if (!preview.paused) refresh_marks.begin (); });
+            preview.rendered.connect (() => refresh_marks.begin ());
             // Each pane keeps its selection when it loses focus, so the one focused last says which an export takes.
             var editor_focus = new Gtk.EventControllerFocus ();
             editor_focus.enter.connect (() => preview_focused_last = false);
@@ -359,6 +358,11 @@ namespace Mdex {
 
         /** Marks what the ticket's plan covers in the preview and lists the criteria in the pane. A document with no plan beside it has neither. */
         private async void refresh_coverage () {
+            // A paused preview shows only a selection being printed, where most marks would read as missing;
+            // the render that restores the page refreshes them.
+            if (preview.paused) {
+                return;
+            }
             if (plan_path == null) {
                 criteria_button.visible = false;
                 criteria_button.active = false;
@@ -387,6 +391,11 @@ namespace Mdex {
 
         /** Marks the open comments' quotes in the preview, then shows the list with the ones not found flagged. */
         private async void refresh_comments () {
+            // A paused preview shows only a selection being printed, where most marks would read as missing;
+            // the render that restores the page refreshes them.
+            if (preview.paused) {
+                return;
+            }
             // One read of the sidecar serves the marks and the pane; null is a file that cannot be read.
             Gee.List<Comment>? all = comments != null ? comments.list () : new Gee.ArrayList<Comment> ();
             Comment[] open = {};
@@ -683,12 +692,16 @@ namespace Mdex {
             yield save_pdf (file, selection);
         }
 
-        /** The selection in the pane focused last (for the preview, the Markdown of the blocks it touches), or null. */
+        /**
+         * The selection in the pane focused last, else the other pane's, else null. A preview selection gives the
+         * Markdown of the blocks it touches.
+         */
         public async string? selected_markdown () {
-            if (preview_focused_last) {
-                return yield preview.selected_source ();
+            string? editor_selection = editor.get_selected_text ();
+            if (preview_focused_last || editor_selection == null) {
+                return (yield preview.selected_source ()) ?? editor_selection;
             }
-            return editor.get_selected_text ();
+            return editor_selection;
         }
 
         /** Prints the preview to file as a PDF and says how it went. With a selection, prints only that Markdown. */

@@ -322,7 +322,7 @@ html, body {
       offset += token.raw.length;
       const one = [token];
       one.links = tokens.links;
-      return marked.parser(one).replace(/<([a-zA-Z][\w-]*)/, '<$1 data-mdex-src="' + start + "," + offset + '"');
+      return marked.parser(one).replace(/^(\s*(?:<!--[\s\S]*?-->\s*)*)<([a-zA-Z][\w-]*)/, '$1<$2 data-mdex-src="' + start + "," + offset + '"');
     }).join("");
     source = tokens.map(function (t) { return t.raw; }).join("");
     links = tokens.links;
@@ -708,12 +708,14 @@ html, body {
       });
       if (!ranges.length) return "";
       const md = source.slice(ranges[0][0], ranges[ranges.length - 1][1]).replace(/\s+$/, "");
-      // Labels match case-insensitively, and marked keys them in lower case.
-      const lower = md.toLowerCase();
+      // Labels match case-insensitively with whitespace collapsed, which is how marked keys them.
+      const lower = md.toLowerCase().replace(/\s+/g, " ");
       const defs = Object.keys(links).filter(function (key) { return lower.includes("[" + key + "]"); })
         .map(function (key) {
           const link = links[key];
-          return "[" + key + "]: " + link.href + (link.title ? ' "' + link.title.replace(/"/g, '\\"') + '"' : "");
+          // marked unwraps <...> and unescapes both parts, so wrap and escape them again where needed.
+          const href = !link.href || /[\s<>]/.test(link.href) ? "<" + link.href.replace(/[<>\\]/g, "\\$&") + ">" : link.href;
+          return "[" + key + "]: " + href + (link.title ? ' "' + link.title.replace(/["\\]/g, "\\$&") + '"' : "");
         });
       return defs.length ? md + "\n\n" + defs.join("\n") : md;
     },

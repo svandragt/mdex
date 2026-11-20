@@ -104,6 +104,18 @@ private async void check_page (Mdex.Preview preview) {
     check ("a selection that ends after an image includes the image's paragraph, got %s".printf (image ?? "null"),
         image == "Before.\n\n![logo](a.png) caption");
 
+    yield preview.render ("See [the\nspec][Big  Spec] and [odd].\n\n[big spec]: https://x.test\n[odd]: <https://x.test/a b> \"say \\\"hi\\\"\"\n");
+    yield select_between (preview, "See", "See");
+    string? wrapped = yield preview.selected_source ();
+    check ("a wrapped label keeps its definition and an odd destination stays valid, got %s".printf (wrapped ?? "null"),
+        wrapped == "See [the\nspec][Big  Spec] and [odd].\n\n[big spec]: https://x.test\n[odd]: <https://x.test/a b> \"say \\\"hi\\\"\"");
+
+    yield preview.render ("Intro.\n\n<!-- was <b>old</b> --><p>c</p>\n");
+    yield select_between (preview, "c", "c");
+    string? tagged = yield preview.selected_source ();
+    check ("a tag inside a leading comment is skipped, got %s".printf (tagged ?? "null"),
+        tagged == "<!-- was <b>old</b> --><p>c</p>");
+
     yield clear_selection (preview);
     string? cleared = yield preview.selected_source ();
     check ("a cleared selection gives null", cleared == null);
